@@ -1,0 +1,546 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Dashboard</h1>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Active Services
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ stats.services }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                API Endpoints
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ stats.endpoints }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-link fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Total Scans
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ stats.scans }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-search fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Vulnerabilities
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ stats.vulnerabilities }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-bolt"></i> Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('dashboard.services') }}" class="btn btn-primary w-100">
+                                <i class="fas fa-server me-2"></i>Manage Services
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <button type="button" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#runScanModal">
+                                <i class="fas fa-search me-2"></i>Run Scan
+                            </button>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('dashboard.schedules') }}" class="btn btn-info w-100">
+                                <i class="fas fa-calendar me-2"></i>Schedule Scan
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('dashboard.vulnerabilities') }}" class="btn btn-warning w-100">
+                                <i class="fas fa-exclamation-triangle me-2"></i>View Vulnerabilities
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+        
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history"></i> Recent Scans
+                    </h5>
+                    <a href="{{ url_for('dashboard.scans') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt"></i> View All
+                    </a>
+                </div>
+                <div class="card-body">
+            {% if recent_scans %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                    <thead>
+                        <tr>
+                                        <th>Service</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for scan in recent_scans %}
+                                    <tr class="clickable-row" data-href="{{ url_for('dashboard.scan_detail', scan_id=scan.id) }}" style="cursor: pointer;">
+                                        <td>
+                                            {% if scan.endpoint and scan.endpoint.service %}
+                                                {{ scan.endpoint.service.name }}
+                                            {% else %}
+                                                <span class="text-muted">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if scan.status == 'completed' else 'warning' if scan.status == 'running' else 'danger' if scan.status == 'failed' else 'secondary' }}">
+                                                {{ scan.status.title() }}
+                                            </span>
+                                        </td>
+                                        <td>{{ scan.scan_time.strftime('%Y-%m-%d %H:%M') if scan.scan_time else 'N/A' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                        </div>
+            {% else %}
+                        <p class="text-muted">No recent scans found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Recent Vulnerabilities
+                    </h5>
+                    <a href="{{ url_for('dashboard.vulnerabilities') }}" class="btn btn-sm btn-outline-warning">
+                        <i class="fas fa-external-link-alt"></i> View All
+                    </a>
+                </div>
+                <div class="card-body">
+            {% if recent_vulnerabilities %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                    <thead>
+                        <tr>
+                                        <th>Type</th>
+                            <th>Name</th>
+                            <th>Severity</th>
+                            <th>Endpoint</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vuln in recent_vulnerabilities %}
+                                    <tr class="clickable-row" data-href="{{ url_for('dashboard.vulnerability_detail', vulnerability_id=vuln.id) }}" style="cursor: pointer;">
+                                        <td>{{ vuln.category or 'other' }}</td>
+                                        <td>
+                                            <span title="{{ vuln.name }}">
+                                                {{ vuln.name[:25] }}{% if vuln.name|length > 25 %}...{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'danger' if vuln.severity == 'high' else 'warning' if vuln.severity == 'medium' else 'info' if vuln.severity == 'low' else 'secondary' }}">
+                                                {{ vuln.severity.title() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if vuln.scan and vuln.scan.endpoint %}
+                                                <code>{{ vuln.scan.endpoint.path[:20] }}{% if vuln.scan.endpoint.path|length > 20 %}...{% endif %}</code>
+                                            {% else %}
+                                                <span class="text-muted">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                        </div>
+            {% else %}
+                        <p class="text-muted">No recent vulnerabilities found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        </div>
+        
+    <!-- Services with Most Vulnerabilities -->
+        {% if services_with_vulns %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar"></i> Services with Most Vulnerabilities
+                    </h5>
+                    <a href="{{ url_for('dashboard.services') }}" class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-external-link-alt"></i> View All Services
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Vulnerability Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for service in services_with_vulns %}
+                                <tr class="clickable-row" data-href="{{ url_for('dashboard.service_detail', service_id=service.id) }}" style="cursor: pointer;">
+                        <td>{{ service.name }}</td>
+                                    <td>
+                                        <span class="badge bg-danger">{{ service.vuln_count }}</span>
+                                    </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+        {% endif %}
+</div>
+
+<!-- Run Scan Modal -->
+<div class="modal fade" id="runScanModal" tabindex="-1" aria-labelledby="runScanModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="runScanModalLabel">
+                    <i class="fas fa-search"></i> Configure Security Scan
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="runScanForm">
+                    <!-- Scan Target Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-bullseye"></i> Scan Target
+                        </label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanTarget" id="scanAllServices" value="all" checked>
+                            <label class="form-check-label" for="scanAllServices">
+                                <strong>Scan All Services</strong>
+                                <br><small class="text-muted">Run security scans on all {{ stats.services }} services and their endpoints</small>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanTarget" id="scanSpecificService" value="specific">
+                            <label class="form-check-label" for="scanSpecificService">
+                                <strong>Scan Specific Service</strong>
+                                <br><small class="text-muted">Choose a specific service to scan</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Service Selection (hidden by default) -->
+                    <div class="mb-4" id="serviceSelection" style="display: none;">
+                        <label for="serviceSelect" class="form-label fw-bold">
+                            <i class="fas fa-server"></i> Select Service
+                        </label>
+                        <select class="form-select" id="serviceSelect" name="serviceId">
+                            <option value="">Choose a service...</option>
+                            {% for service in all_services %}
+                            <option value="{{ service.id }}">{{ service.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Scan Type Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-tools"></i> Security Tools
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useZap" name="tools" value="zap" checked>
+                                    <label class="form-check-label" for="useZap">
+                                        <i class="fas fa-bug text-primary"></i> OWASP ZAP
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useNuclei" name="tools" value="nuclei" checked>
+                                    <label class="form-check-label" for="useNuclei">
+                                        <i class="fas fa-radiation text-warning"></i> Nuclei
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useSqlmap" name="tools" value="sqlmap">
+                                    <label class="form-check-label" for="useSqlmap">
+                                        <i class="fas fa-database text-danger"></i> SQLMap
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useSSRFMap" name="tools" value="ssrfmap">
+                                    <label class="form-check-label" for="useSSRFMap">
+                                        <i class="fas fa-network-wired text-info"></i> SSRFMap
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scan Configuration -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-cogs"></i> Scan Configuration
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="scanDepth" class="form-label">Scan Depth</label>
+                                <select class="form-select" id="scanDepth" name="scanDepth">
+                                    <option value="quick">Quick Scan</option>
+                                    <option value="standard" selected>Standard Scan</option>
+                                    <option value="comprehensive">Comprehensive Scan</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="timeout" class="form-label">Timeout (minutes)</label>
+                                <input type="number" class="form-control" id="timeout" name="timeout" value="30" min="5" max="120">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableNotifications" name="notifications" checked>
+                            <label class="form-check-label" for="enableNotifications">
+                                <i class="fas fa-bell"></i> Enable Slack Notifications
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="saveParameters" name="saveParameters" checked>
+                            <label class="form-check-label" for="saveParameters">
+                                <i class="fas fa-save"></i> Save Successful Parameters
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-success" id="startScanBtn">
+                    <i class="fas fa-play"></i> Start Scan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Make table rows clickable
+document.addEventListener('DOMContentLoaded', function() {
+    const clickableRows = document.querySelectorAll('.clickable-row');
+    
+    clickableRows.forEach(function(row) {
+        row.addEventListener('click', function() {
+            const href = this.getAttribute('data-href');
+            if (href) {
+                window.location.href = href;
+            }
+        });
+        
+        // Add hover effect
+        row.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f8f9fa';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+    });
+
+    // Run Scan Modal Logic
+    const scanAllServices = document.getElementById('scanAllServices');
+    const scanSpecificService = document.getElementById('scanSpecificService');
+    const serviceSelection = document.getElementById('serviceSelection');
+    const serviceSelect = document.getElementById('serviceSelect');
+    const startScanBtn = document.getElementById('startScanBtn');
+
+    // Toggle service selection visibility
+    scanAllServices.addEventListener('change', function() {
+        if (this.checked) {
+            serviceSelection.style.display = 'none';
+            serviceSelect.required = false;
+        }
+    });
+
+    scanSpecificService.addEventListener('change', function() {
+        if (this.checked) {
+            serviceSelection.style.display = 'block';
+            serviceSelect.required = true;
+        }
+    });
+
+    // Start scan functionality
+    startScanBtn.addEventListener('click', function() {
+        const form = document.getElementById('runScanForm');
+        const formData = new FormData(form);
+        
+        // Get selected tools
+        const selectedTools = [];
+        document.querySelectorAll('input[name="tools"]:checked').forEach(tool => {
+            selectedTools.push(tool.value);
+        });
+
+        if (selectedTools.length === 0) {
+            alert('Please select at least one security tool.');
+            return;
+        }
+
+        if (scanSpecificService.checked && !serviceSelect.value) {
+            alert('Please select a service to scan.');
+            return;
+        }
+
+        // Prepare scan configuration
+        const scanConfig = {
+            target: formData.get('scanTarget'),
+            serviceId: formData.get('serviceId'),
+            tools: selectedTools,
+            scanDepth: formData.get('scanDepth'),
+            timeout: parseInt(formData.get('timeout')),
+            notifications: formData.has('notifications'),
+            saveParameters: formData.has('saveParameters')
+        };
+
+        // Show loading state
+        startScanBtn.disabled = true;
+        startScanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting Scan...';
+
+        // Send scan request
+        fetch('/api/start-scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(scanConfig)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close modal and show success message
+                const modal = bootstrap.Modal.getInstance(document.getElementById('runScanModal'));
+                modal.hide();
+                
+                // Show success notification
+                showNotification('Scan started successfully!', 'success');
+                
+                // Optionally redirect to scans page after a delay
+                setTimeout(() => {
+                    window.location.href = '/scans';
+                }, 2000);
+            } else {
+                throw new Error(data.message || 'Failed to start scan');
+            }
+        })
+        .catch(error => {
+            console.error('Error starting scan:', error);
+            alert('Error starting scan: ' + error.message);
+            
+            // Reset button state
+            startScanBtn.disabled = false;
+            startScanBtn.innerHTML = '<i class="fas fa-play"></i> Start Scan';
+        });
+    });
+});
+
+// Notification function
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

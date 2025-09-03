@@ -1,0 +1,670 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Endpoints{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">API Endpoints</h1>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-filter"></i> Filters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('dashboard.endpoints') }}" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="service_filter" class="form-label">Service</label>
+                            <select class="form-select" id="service_filter" name="service">
+                                <option value="">All Services</option>
+                                {% for service in services %}
+                                <option value="{{ service.id }}" {% if service_filter == service.id %}selected{% endif %}>
+                                    {{ service.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="method_filter" class="form-label">Method</label>
+                            <select class="form-select" id="method_filter" name="method">
+                                <option value="">All Methods</option>
+                                <option value="GET" {% if method_filter == 'GET' %}selected{% endif %}>GET</option>
+                                <option value="POST" {% if method_filter == 'POST' %}selected{% endif %}>POST</option>
+                                <option value="PUT" {% if method_filter == 'PUT' %}selected{% endif %}>PUT</option>
+                                <option value="DELETE" {% if method_filter == 'DELETE' %}selected{% endif %}>DELETE</option>
+                                <option value="PATCH" {% if method_filter == 'PATCH' %}selected{% endif %}>PATCH</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="path_filter" class="form-label">Path Contains</label>
+                            <input type="text" class="form-control" id="path_filter" name="path" 
+                                   value="{{ path_filter or '' }}" placeholder="Enter path keyword">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="risk_filter" class="form-label">Risk Level</label>
+                            <select class="form-select" id="risk_filter" name="risk">
+                                <option value="">All Levels</option>
+                                <option value="high" {% if risk_filter == 'high' %}selected{% endif %}>High</option>
+                                <option value="medium" {% if risk_filter == 'medium' %}selected{% endif %}>Medium</option>
+                                <option value="low" {% if risk_filter == 'low' %}selected{% endif %}>Low</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search"></i> Filter
+                                </button>
+                </div>
+                </div>
+                    </form>
+                </div>
+            </div>
+                </div>
+                </div>
+                
+    <!-- Endpoints Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-link"></i> API Endpoints ({{ endpoints.total }})
+                    </h5>
+                </div>
+                <div class="card-body">
+            {% if endpoints.items %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Path</th>
+                            <th>Service</th>
+                            <th>Summary</th>
+                            <th>Risk Score</th>
+                                        <th>Parameters</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for endpoint in endpoints.items %}
+                        <tr data-endpoint-id="{{ endpoint.id }}" data-parameters='{{ endpoint.parsed_parameters_schema|tojson|safe if endpoint.parsed_parameters_schema else "[]" }}'>
+                            <td>
+                                            <span class="badge bg-{{ 'success' if endpoint.method == 'GET' else 'primary' if endpoint.method == 'POST' else 'warning' if endpoint.method == 'PUT' else 'danger' if endpoint.method == 'DELETE' else 'info' }}">
+                                    {{ endpoint.method }}
+                                </span>
+                            </td>
+                            <td>
+                                            <code>{{ endpoint.path }}</code>
+                                            {% if endpoint.summary %}
+                                                <br><small class="text-muted">{{ endpoint.summary[:100] }}{% if endpoint.summary|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                            </td>
+                            <td>
+                                            <a href="{{ url_for('dashboard.service_detail', service_id=endpoint.service.id) }}">
+                                    {{ endpoint.service.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if endpoint.summary %}
+                                                {{ endpoint.summary[:80] }}{% if endpoint.summary|length > 80 %}...{% endif %}
+                                {% else %}
+                                                <span class="text-muted">No summary</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if endpoint.risk_score %}
+                                                <span class="badge bg-{{ 'danger' if endpoint.risk_score >= 7 else 'warning' if endpoint.risk_score >= 4 else 'success' }}">
+                                                    {{ endpoint.risk_score }}/10
+                                </span>
+                                {% else %}
+                                                <span class="badge bg-secondary">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="parameters-cell">
+                                            {% if endpoint.parsed_parameters_schema %}
+                                                <span class="badge bg-info">{{ endpoint.parsed_parameters_schema|length }}</span>
+                                                <br><small class="text-muted">{{ endpoint.parsed_parameters_schema|length }} parameters available</small>
+                                            {% else %}
+                                                <span class="badge bg-secondary">0</span>
+                                                <br><small class="text-muted">No parameters</small>
+                                            {% endif %}
+                            </td>
+                            <td>
+                                            <div class="btn-group" role="group">
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        onclick="viewEndpoint('{{ endpoint.id }}')" 
+                                                        title="View Details">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-success" 
+                                                        onclick="runScan('{{ endpoint.id }}')" 
+                                                        title="Run Scan">
+                                                    <i class="fas fa-search"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-info" 
+                                                        onclick="generateAI('{{ endpoint.id }}')" 
+                                                        title="Generate AI Description">
+                                                    <i class="fas fa-robot"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-warning" 
+                                                        onclick="addParameter('{{ endpoint.id }}')" 
+                                                        title="Add Parameter">
+                                                    <i class="fas fa-plus"></i>
+                                    </button>
+
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                        </div>
+                
+                <!-- Pagination -->
+                {% if endpoints.pages > 1 %}
+                        <nav aria-label="Endpoints pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                    {% if endpoints.has_prev %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('dashboard.endpoints', page=endpoints.prev_num, service=service_filter, method=method_filter, path=path_filter, risk=risk_filter) if service_filter or method_filter or path_filter or risk_filter else url_for('dashboard.endpoints', page=endpoints.prev_num) }}">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </a>
+                                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in endpoints.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num != endpoints.page %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ url_for('dashboard.endpoints', page=page_num, service=service_filter, method=method_filter, path=path_filter, risk=risk_filter) if service_filter or method_filter or path_filter or risk_filter else url_for('dashboard.endpoints', page=page_num) }}">{{ page_num }}</a>
+                                            </li>
+                            {% else %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ page_num }}</span>
+                                            </li>
+                            {% endif %}
+                        {% else %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if endpoints.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('dashboard.endpoints', page=endpoints.next_num, service=service_filter, method=method_filter, path=path_filter, risk=risk_filter) if service_filter or method_filter or path_filter or risk_filter else url_for('dashboard.endpoints', page=endpoints.next_num) }}">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                    {% endif %}
+                            </ul>
+                        </nav>
+                        <div class="text-center text-muted">
+                            Showing {{ endpoints.items|length }} of {{ endpoints.total }} endpoints
+                </div>
+                {% endif %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-link fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No endpoints found</h5>
+                            <p class="text-muted">Try adjusting your filters or add services first.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+                </div>
+                
+<!-- Endpoint Detail Modal -->
+<div class="modal fade" id="endpointModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-link"></i> Endpoint Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="endpointModalBody">
+                <!-- Content will be loaded dynamically -->
+                </div>
+        </div>
+        </div>
+    </div>
+    
+    <!-- AI Description Modal -->
+<div class="modal fade" id="aiDescriptionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-robot"></i> AI-Generated Description
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="aiDescriptionBody">
+                <!-- Content will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Parameter Modal -->
+<div class="modal fade" id="addParameterModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus"></i> Add Manual Parameter
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addParameterForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="parameterName" class="form-label">Parameter Name</label>
+                        <select class="form-select" id="parameterName" name="parameter_name" required>
+                            <option value="">Select a parameter...</option>
+                        </select>
+                        <small class="form-text text-muted">Choose from existing parameters or type a new one</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parameterValue" class="form-label">Parameter Value</label>
+                        <input type="text" class="form-control" id="parameterValue" name="parameter_value" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parameterType" class="form-label">Parameter Type</label>
+                        <select class="form-select" id="parameterType" name="parameter_type">
+                            <option value="string">String</option>
+                            <option value="integer">Integer</option>
+                            <option value="boolean">Boolean</option>
+                            <option value="array">Array</option>
+                            <option value="object">Object</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-info" onclick="validateParameter()">
+                            <i class="fas fa-check"></i> Validate Parameter
+                        </button>
+                        <div id="validationResult" class="mt-2"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Parameter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+let currentEndpointId = null;
+
+function viewEndpoint(endpointId) {
+    fetch(`/endpoints/${endpointId}?partial=1`)
+        .then(response => response.text())
+        .then(html => {
+            document.getElementById('endpointModalBody').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('endpointModal')).show();
+        })
+        .catch(error => {
+            alert('Error loading endpoint details: ' + error.message);
+        });
+}
+
+function runScan(endpointId) {
+    if (confirm('Run security scan for this endpoint?')) {
+        fetch(`/api/trigger-scan/${endpointId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                scan_type: 'combined'
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Scan started successfully! Task ID: ' + data.task_id);
+                // Don't redirect immediately, let user see the success message
+                setTimeout(() => {
+                    window.location.href = '/scans';
+                }, 2000);
+            } else {
+                alert('Error starting scan: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Scan error:', error);
+            alert('Error starting scan: ' + (error.message || 'Network or server error'));
+        });
+    }
+}
+
+function generateAI(endpointId) {
+    const button = event.target.closest('button');
+    const originalHTML = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+            
+            fetch(`/generate-description/${endpointId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+            const modalBody = document.getElementById('aiDescriptionBody');
+            modalBody.innerHTML = `
+                <div class="row">
+                    <div class="col-12">
+                        <h6><i class="fas fa-file-alt"></i> Description</h6>
+                        <div class="alert alert-info">${data.description}</div>
+                        
+                        <h6><i class="fas fa-shield-alt"></i> Security Analysis</h6>
+                        <div class="alert alert-warning">${data.security_analysis}</div>
+                        
+                        <h6><i class="fas fa-exclamation-triangle"></i> Risk Assessment</h6>
+                        <div class="alert alert-danger">${data.risk_assessment}</div>
+                        
+                        <h6><i class="fas fa-lightbulb"></i> Recommendations</h6>
+                        <div class="alert alert-success">
+                            ${Array.isArray(data.recommendations) ? data.recommendations.map(rec => `<li>${rec}</li>`).join('') : data.recommendations}
+                        </div>
+                            </div>
+                        </div>
+            `;
+            new bootstrap.Modal(document.getElementById('aiDescriptionModal')).show();
+                } else {
+            alert('Error generating description: ' + data.error);
+                }
+            })
+            .catch(error => {
+        alert('Error: ' + error.message);
+    })
+    .finally(() => {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+    });
+}
+
+
+
+function addParameter(endpointId) {
+    currentEndpointId = endpointId;
+    document.getElementById('addParameterForm').reset();
+    document.getElementById('validationResult').innerHTML = '';
+    
+    // Populate parameter names dropdown
+    populateParameterNames(endpointId);
+    
+    new bootstrap.Modal(document.getElementById('addParameterModal')).show();
+}
+
+function populateParameterNames(endpointId) {
+    // Get the endpoint row to extract parameter names
+    const endpointRow = document.querySelector(`[data-endpoint-id="${endpointId}"]`);
+    if (!endpointRow) {
+        console.log('No endpoint row found for ID:', endpointId);
+        return;
+    }
+    
+    const parameterNamesSelect = document.getElementById('parameterName');
+    parameterNamesSelect.innerHTML = '<option value="">Select a parameter...</option>';
+    
+    // Get parameter names from the endpoint data
+    let parameterNames = getEndpointParameterNames(endpointId);
+    
+    // If no parameters found in DOM, try to fetch from server
+    if (parameterNames.length === 0) {
+        fetchEndpointParameters(endpointId, parameterNamesSelect);
+        return;
+    }
+    
+    // Add existing parameter names to dropdown
+    parameterNames.forEach(paramName => {
+        const option = document.createElement('option');
+        option.value = paramName;
+        option.textContent = paramName;
+        parameterNamesSelect.appendChild(option);
+    });
+    
+    // Add option to type custom parameter
+    const customOption = document.createElement('option');
+    customOption.value = 'custom';
+    customOption.textContent = '➕ Type custom parameter...';
+    parameterNamesSelect.appendChild(customOption);
+    
+    // Handle custom parameter input
+    parameterNamesSelect.addEventListener('change', function() {
+        if (this.value === 'custom') {
+            // Replace dropdown with text input for custom parameter
+            const customInput = document.createElement('input');
+            customInput.type = 'text';
+            customInput.className = 'form-control';
+            customInput.placeholder = 'Enter custom parameter name';
+            customInput.required = true;
+            customInput.id = 'customParameterName';
+            
+            this.parentNode.replaceChild(customInput, this);
+        }
+    });
+}
+
+function fetchEndpointParameters(endpointId, selectElement) {
+    // Fetch endpoint details to get parameter information
+    fetch(`/endpoints/${endpointId}?partial=1`)
+        .then(response => response.text())
+        .then(html => {
+            // Create a temporary div to parse the HTML
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            
+            // Try to extract parameters from the endpoint detail view
+            const paramElements = tempDiv.querySelectorAll('[data-parameter]');
+            if (paramElements.length > 0) {
+                const paramNames = Array.from(paramElements).map(el => el.getAttribute('data-parameter'));
+                
+                // Add parameter names to dropdown
+                paramNames.forEach(paramName => {
+                    const option = document.createElement('option');
+                    option.value = paramName;
+                    option.textContent = paramName;
+                    selectElement.appendChild(option);
+                });
+            }
+            
+            // Always add custom parameter option
+            const customOption = document.createElement('option');
+            customOption.value = 'custom';
+            customOption.textContent = '➕ Type custom parameter...';
+            selectElement.appendChild(customOption);
+            
+            // Handle custom parameter input
+            selectElement.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    const customInput = document.createElement('input');
+                    customInput.type = 'text';
+                    customInput.className = 'form-control';
+                    customInput.placeholder = 'Enter custom parameter name';
+                    customInput.required = true;
+                    customInput.id = 'customParameterName';
+                    
+                    this.parentNode.replaceChild(customInput, this);
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching endpoint parameters:', error);
+            
+            // Add custom parameter option as fallback
+            const customOption = document.createElement('option');
+            customOption.value = 'custom';
+            customOption.textContent = '➕ Type custom parameter...';
+            selectElement.appendChild(customOption);
+            
+            // Handle custom parameter input
+            selectElement.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    const customInput = document.createElement('input');
+                    customInput.type = 'text';
+                    customInput.className = 'form-control';
+                    customInput.placeholder = 'Enter custom parameter name';
+                    customInput.required = true;
+                    customInput.id = 'customParameterName';
+                    
+                    this.parentNode.replaceChild(customInput, this);
+                }
+            });
+        });
+}
+
+function getEndpointParameterNames(endpointId) {
+    const endpointRow = document.querySelector(`[data-endpoint-id="${endpointId}"]`);
+    if (!endpointRow) {
+        return [];
+    }
+    
+    // Get parameters from data attribute
+    const parametersData = endpointRow.getAttribute('data-parameters');
+    
+    if (!parametersData || parametersData === '[]' || parametersData === 'null') {
+        return [];
+    }
+    
+    try {
+        // Try to parse as JSON
+        let parameters;
+        if (typeof parametersData === 'string') {
+            parameters = JSON.parse(parametersData);
+        } else {
+            parameters = parametersData;
+        }
+        
+        if (Array.isArray(parameters)) {
+            const paramNames = parameters.map(param => {
+                if (typeof param === 'object' && param.name) {
+                    return param.name;
+                } else if (typeof param === 'string') {
+                    return param;
+                }
+                return null;
+            }).filter(Boolean);
+            
+            return paramNames;
+        } else {
+            return [];
+        }
+    } catch (e) {
+        console.error('Error parsing parameters for endpoint', endpointId, ':', e);
+        return [];
+    }
+}
+
+function validateParameter() {
+    const nameInput = document.getElementById('parameterName');
+    const customInput = document.getElementById('customParameterName');
+    const value = document.getElementById('parameterValue').value;
+    
+    // Get parameter name from either dropdown or custom input
+    let name = '';
+    if (customInput) {
+        name = customInput.value;
+    } else if (nameInput) {
+        name = nameInput.value;
+    }
+    
+    if (!name || !value) {
+        alert('Please enter both parameter name and value');
+        return;
+    }
+    
+    const resultDiv = document.getElementById('validationResult');
+    resultDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Validating...</div>';
+    
+    fetch(`/validate-parameter/${currentEndpointId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `parameter_name=${encodeURIComponent(name)}&parameter_value=${encodeURIComponent(value)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const statusClass = data.is_valid ? 'success' : 'danger';
+            const statusIcon = data.is_valid ? 'check' : 'times';
+            const statusText = data.is_valid ? 'Valid' : 'Invalid';
+            
+            resultDiv.innerHTML = `
+                <div class="alert alert-${statusClass}">
+                    <i class="fas fa-${statusIcon}"></i> <strong>${statusText}</strong><br>
+                    Status Code: ${data.status_code}<br>
+                    Response Time: ${data.response_time.toFixed(2)}s<br>
+                    Test URL: <code>${data.test_url}</code>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+    });
+}
+
+document.getElementById('addParameterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    formData.append('endpoint_id', currentEndpointId);
+    
+    // Handle custom parameter name if present
+    const customInput = document.getElementById('customParameterName');
+    if (customInput && customInput.value) {
+        formData.set('parameter_name', customInput.value);
+    }
+    
+    fetch(`/manual-parameter/${currentEndpointId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Parameter added successfully!');
+            bootstrap.Modal.getInstance(document.getElementById('addParameterModal')).hide();
+        } else {
+            alert('Error adding parameter: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+        });
+    </script>
+{% endblock %}

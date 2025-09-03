@@ -1,0 +1,524 @@
+# APIShield - API Security Framework
+# Comprehensive .gitignore file
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# =============================================================================
+# SECURITY TOOLS & DATA
+# =============================================================================
+
+# OWASP ZAP
+.zap/
+ZAP_*.dmg
+ZAP_*.tar.gz
+ZAP_*.zip
+
+# Nuclei
+nuclei-templates/
+nuclei-output/
+
+# SQLMap
+.sqlmap/
+sqlmap_output/
+
+# SSRFMap
+.ssrfmap/
+
+# XSStrike
+.xsstrike/
+
+# Burp Suite
+*.burp
+
+# Nmap
+*.nmap
+*.xml
+
+# Metasploit
+*.rc
+
+# Security scan results
+scan_results/
+vulnerability_reports/
+security_reports/
+
+# API keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+*.pem
+secrets.json
+secrets.yaml
+secrets.yml
+
+# =============================================================================
+# DATABASES
+# =============================================================================
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+instance/
+*.db-journal
+
+# PostgreSQL
+*.psql
+
+# MySQL
+*.sql
+
+# Redis
+dump.rdb
+*.rdb
+
+# =============================================================================
+# LOGS & TEMPORARY FILES
+# =============================================================================
+
+# Application logs
+*.log
+logs/
+log/
+
+# System logs
+syslog
+messages
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# =============================================================================
+# OPERATING SYSTEM
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# DEVELOPMENT & BUILD
+# =============================================================================
+
+# Node.js (if using any frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Python packaging
+*.egg-info/
+*.egg
+dist/
+build/
+eggs/
+parts/
+bin/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath
+*.sage.py
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mkdocs
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+
+# pytype
+.pytype/
+
+# Cython
+cython_debug/
+
+# =============================================================================
+# CLOUD & DEPLOYMENT
+# =============================================================================
+
+# AWS
+.aws/
+aws.json
+aws.yml
+
+# Azure
+.azure/
+azure.json
+azure.yml
+
+# Google Cloud
+.gcloud/
+gcloud.json
+gcloud.yml
+
+# Docker
+.docker/
+Dockerfile.dev
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# Kubernetes
+*.kubeconfig
+.kube/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+
+# =============================================================================
+# TESTING & QUALITY
+# =============================================================================
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Performance testing
+.jmeter/
+*.jtl
+*.log
+
+# Security testing
+*.pcap
+*.pcapng
+*.cap
+
+# =============================================================================
+# BACKUP & ARCHIVE
+# =============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.swp
+*.swo
+*~
+
+# Archive files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+*.bz2
+*.xz
+
+# =============================================================================
+# CUSTOM APIShield FILES
+# =============================================================================
+
+# Configuration overrides
+config.local.py
+.env.local
+.env.production
+.env.staging
+
+# User data
+user_data/
+personal/
+custom/
+
+# Scan artifacts
+scan_artifacts/
+vulnerability_data/
+evidence_files/
+
+# API definitions cache
+api_cache/
+swagger_cache/
+openapi_cache/
+
+# Monitoring data
+monitoring_data/
+baseline_data/
+change_logs/
+
+# Notification logs
+notification_logs/
+slack_logs/
+email_logs/
+
+# =============================================================================
+# IGNORE EXCEPTIONS
+# =============================================================================
+
+# Keep important files
+!requirements.txt
+!requirements-dev.txt
+!requirements-prod.txt
+!config.py
+!main_app.py
+!README.md
+!QUICK_START.md
+!setup.sh
+!setup.bat
+!install_and_run.sh
+!install_and_run.bat
+!.gitignore
+
+# Keep app structure
+!app/
+!app/**/*
+!static/
+!static/**/*
+!migrations/
+!migrations/**/*
+
+# Keep templates
+!templates/
+!templates/**/*
+

@@ -1,0 +1,417 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Vulnerabilities{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Vulnerabilities</h1>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Total Vulnerabilities
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ total_vulnerabilities }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                High Risk
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ high_risk_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Medium Risk
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ medium_risk_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Low Risk
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ low_risk_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-info-circle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-white-50 text-uppercase mb-1">
+                                Info Risk
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-white">{{ info_risk_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-info-circle fa-2x text-white-50"></i>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+            
+            <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-filter"></i> Filters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form class="row g-3" method="GET" action="{{ url_for('dashboard.vulnerabilities') }}">
+                        <div class="col-md-3">
+                            <label for="severity-filter" class="form-label">Severity</label>
+                            <select class="form-select" id="severity-filter" name="severity">
+                        <option value="">All Severities</option>
+                        <option value="high" {% if severity_filter == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Low</option>
+                                <option value="info" {% if severity_filter == 'info' %}selected{% endif %}>Info</option>
+                    </select>
+                </div>
+                
+                        <div class="col-md-3">
+                            <label for="category-filter" class="form-label">Category</label>
+                            <select class="form-select" id="category-filter" name="category">
+                        <option value="">All Categories</option>
+                                <option value="sql_injection" {% if category_filter == 'sql_injection' %}selected{% endif %}>SQL Injection</option>
+                                <option value="xss" {% if category_filter == 'xss' %}selected{% endif %}>XSS</option>
+                        <option value="ssrf" {% if category_filter == 'ssrf' %}selected{% endif %}>SSRF</option>
+                        <option value="authentication" {% if category_filter == 'authentication' %}selected{% endif %}>Authentication</option>
+                        <option value="authorization" {% if category_filter == 'authorization' %}selected{% endif %}>Authorization</option>
+                                <option value="cors" {% if category_filter == 'cors' %}selected{% endif %}>CORS</option>
+                                <option value="open_redirect" {% if category_filter == 'open_redirect' %}selected{% endif %}>Open Redirect</option>
+                                <option value="other" {% if category_filter == 'other' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+                
+                        <div class="col-md-3">
+                            <label for="status-filter" class="form-label">Status</label>
+                            <select class="form-select" id="status-filter" name="status">
+                                <option value="">All Statuses</option>
+                                <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open</option>
+                                <option value="false_positive" {% if status_filter == 'false_positive' %}selected{% endif %}>False Positive</option>
+                                <option value="remediated" {% if status_filter == 'remediated' %}selected{% endif %}>Remediated</option>
+                            </select>
+                </div>
+                
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Filter
+                            </button>
+                            <a href="{{ url_for('dashboard.vulnerabilities') }}" class="btn btn-secondary ms-2">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+                            </div>
+                    </div>
+                    
+    <!-- Vulnerabilities List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list"></i> Vulnerabilities
+                    </h5>
+                    </div>
+                <div class="card-body">
+                    {% if vulnerabilities.items %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Severity</th>
+                                        <th>Category</th>
+                                        <th>Endpoint</th>
+                                        <th>Service</th>
+                                        <th>CVSS Score</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for vulnerability in vulnerabilities.items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ vulnerability.name }}</strong>
+                                            {% if vulnerability.description %}
+                                                <br><small class="text-muted">{{ vulnerability.description[:100] }}{% if vulnerability.description|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'danger' if vulnerability.severity == 'high' else 'warning' if vulnerability.severity == 'medium' else 'info' if vulnerability.severity == 'low' else 'secondary' }}">
+                                                {{ vulnerability.severity.upper() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ vulnerability.category or 'Unknown' }}</span>
+                                        </td>
+                                        <td>
+                                            {% if vulnerability.scan and vulnerability.scan.endpoint %}
+                                            <code>{{ vulnerability.scan.endpoint.path }}</code>
+                            {% else %}
+                                            <span class="text-muted">Unknown</span>
+                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if vulnerability.scan and vulnerability.scan.endpoint and vulnerability.scan.endpoint.service %}
+                                            <a href="{{ url_for('dashboard.service_detail', service_id=vulnerability.scan.endpoint.service_id) }}">
+                                                {{ vulnerability.scan.endpoint.service.name }}
+                            </a>
+                            {% else %}
+                                            <span class="text-muted">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if vulnerability.cvss_score %}
+                                            <span class="badge bg-{{ 'danger' if vulnerability.cvss_score >= 7 else 'warning' if vulnerability.cvss_score >= 4 else 'info' }}">
+                                                {{ vulnerability.cvss_score }}/10
+                                            </span>
+                                            {% else %}
+                                            <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if vulnerability.false_positive %}
+                                                <span class="badge bg-warning">False Positive</span>
+                                            {% elif vulnerability.remediated %}
+                                                <span class="badge bg-success">Remediated</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Open</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <a href="{{ url_for('dashboard.vulnerability_detail', vulnerability_id=vulnerability.id) }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                {% if not vulnerability.false_positive %}
+                                                <button class="btn btn-sm btn-outline-warning" onclick="markFalsePositive('{{ vulnerability.id }}')" title="Mark as False Positive">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                                {% endif %}
+                                                {% if not vulnerability.remediated %}
+                                                <button class="btn btn-sm btn-outline-success" onclick="markRemediated('{{ vulnerability.id }}')" title="Mark as Remediated">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                            {% endif %}
+                        </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                
+                <!-- Pagination -->
+                {% if vulnerabilities.pages > 1 %}
+                        <nav aria-label="Vulnerabilities pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                    {% if vulnerabilities.has_prev %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('dashboard.vulnerabilities', page=vulnerabilities.prev_num, severity=severity_filter, category=category_filter) }}">
+                                            <i class="fas fa-chevron-left"></i> Previous
+                                        </a>
+                                    </li>
+                    {% endif %}
+                    
+                    {% for page_num in vulnerabilities.iter_pages() %}
+                        {% if page_num %}
+                            {% if page_num != vulnerabilities.page %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ url_for('dashboard.vulnerabilities', page=page_num, severity=severity_filter, category=category_filter) }}">{{ page_num }}</a>
+                                            </li>
+                            {% else %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ page_num }}</span>
+                                            </li>
+                            {% endif %}
+                        {% else %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if vulnerabilities.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('dashboard.vulnerabilities', page=vulnerabilities.next_num, severity=severity_filter, category=category_filter) }}">
+                                            Next <i class="fas fa-chevron-right"></i>
+                                        </a>
+                                    </li>
+                    {% endif %}
+                            </ul>
+                        </nav>
+                        <div class="text-center text-muted">
+                            Showing {{ vulnerabilities.items|length }} of {{ vulnerabilities.total }} vulnerabilities
+                </div>
+                {% endif %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No Vulnerabilities Found</h5>
+                            <p class="text-muted">Great! No security vulnerabilities have been detected yet.</p>
+                            <a href="{{ url_for('dashboard.endpoints') }}" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Run Security Scans
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+                </div>
+        </div>
+        </div>
+    </div>
+    
+    <script>
+        function applyFilters() {
+    const severityFilter = document.getElementById('severity-filter');
+    const categoryFilter = document.getElementById('category-filter');
+    const statusFilter = document.getElementById('status-filter');
+    const tableRows = document.querySelectorAll('.table tbody tr');
+    
+    const severityValue = severityFilter.value.toLowerCase();
+    const categoryValue = categoryFilter.value.toLowerCase();
+    const statusValue = statusFilter.value.toLowerCase();
+    
+    tableRows.forEach(row => {
+        const severity = row.cells[1].textContent.trim().toLowerCase();
+        const category = row.cells[2].textContent.trim().toLowerCase();
+        const status = row.cells[6].textContent.trim().toLowerCase();
+        
+        let show = true;
+        
+        // Severity filter
+        if (severityValue && !severity.includes(severityValue)) {
+            show = false;
+        }
+        
+        // Category filter
+        if (categoryValue && !category.includes(categoryValue)) {
+            show = false;
+        }
+        
+        // Status filter
+        if (statusValue && !status.includes(statusValue)) {
+            show = false;
+        }
+        
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+function markFalsePositive(vulnerabilityId) {
+    if (confirm('Mark this vulnerability as a false positive?')) {
+        fetch(`/api/mark-vulnerability-false-positive/${vulnerabilityId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+                    } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error.message);
+        });
+    }
+}
+
+function markRemediated(vulnerabilityId) {
+    if (confirm('Mark this vulnerability as remediated?')) {
+        fetch(`/api/mark-vulnerability-remediated/${vulnerabilityId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error.message);
+        });
+    }
+}
+
+// Apply filters on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const severityFilter = document.getElementById('severity-filter');
+    const categoryFilter = document.getElementById('category-filter');
+    const statusFilter = document.getElementById('status-filter');
+    
+    severityFilter.addEventListener('change', applyFilters);
+    categoryFilter.addEventListener('change', applyFilters);
+    statusFilter.addEventListener('change', applyFilters);
+        });
+    </script>
+{% endblock %}

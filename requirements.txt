@@ -1,0 +1,42 @@
+# API Security Framework Dependencies
+
+# Flask and extensions
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.3
+Flask-WTF==1.1.1
+WTForms==3.0.1
+
+# Database
+SQLAlchemy==2.0.21
+
+# Task queue
+celery==5.3.1
+redis==4.6.0
+
+# HTTP requests
+requests==2.31.0
+urllib3==2.0.4
+
+# Security and cryptography
+bcrypt==4.0.1
+cryptography==41.0.4
+
+# Data processing
+pandas==2.0.3
+numpy==1.24.3
+
+# AI and machine learning
+openai==0.28.1
+
+# Utilities
+python-dotenv==1.0.0
+click==8.1.7
+rich==13.5.2
+tqdm==4.66.1
+
+# Development and testing
+pytest==7.4.2
+pytest-cov==4.1.0
+black==23.7.0
+flake8==6.0.0

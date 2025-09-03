@@ -1,0 +1,379 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Settings</h1>
+        </div>
+    </div>
+
+    <!-- Slack Notifications Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-slack"></i> Slack Notifications
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Notification Status</h6>
+                            <div id="slackStatus">
+                                <span class="badge bg-secondary">Checking...</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Quick Actions</h6>
+                            <button class="btn btn-primary btn-sm me-2" onclick="testSlackNotification()">
+                                <i class="fas fa-paper-plane"></i> Test Notification
+                            </button>
+                            <button class="btn btn-success btn-sm" onclick="sendDailySummary()">
+                                <i class="fas fa-chart-bar"></i> Send Daily Summary
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6>Notification Types</h6>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyScanStarted" checked>
+                                        <label class="form-check-label" for="notifyScanStarted">
+                                            🚀 Scan Started
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyScanCompleted" checked>
+                                        <label class="form-check-label" for="notifyScanCompleted">
+                                            ✅ Scan Completed
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyVulnerabilities" checked>
+                                        <label class="form-check-label" for="notifyVulnerabilities">
+                                            ⚠️ Vulnerabilities Found
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyHighRisk" checked>
+                                        <label class="form-check-label" for="notifyHighRisk">
+                                            🚨 High-Risk Alerts
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyScheduleExecuted" checked>
+                                        <label class="form-check-label" for="notifyScheduleExecuted">
+                                            📅 Schedule Executed
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifySystemErrors" checked>
+                                        <label class="form-check-label" for="notifySystemErrors">
+                                            💥 System Errors
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="notifyDailySummary" checked>
+                                        <label class="form-check-label" for="notifyDailySummary">
+                                            📊 Daily Summary
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Configuration Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-robot"></i> AI Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="openaiModel" class="form-label">OpenAI Model</label>
+                                <select class="form-select" id="openaiModel">
+                                    <option value="gpt-4">GPT-4</option>
+                                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="aiEnabled" class="form-label">AI Features</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="aiEnabled" checked>
+                                    <label class="form-check-label" for="aiEnabled">
+                                        Enable AI-powered features
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Tools Configuration -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-shield-alt"></i> Security Tools
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableZAP" checked>
+                                <label class="form-check-label" for="enableZAP">
+                                    🕷️ OWASP ZAP
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableNuclei" checked>
+                                <label class="form-check-label" for="enableNuclei">
+                                    🎯 Nuclei
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableSQLMap" checked>
+                                <label class="form-check-label" for="enableSQLMap">
+                                    💉 SQLMap
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableSSRFMap" checked>
+                                <label class="form-check-label" for="enableSSRFMap">
+                                    🌐 SSRFMap
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle"></i> System Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Database:</strong></td>
+                                        <td>SQLite</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Framework:</strong></td>
+                                        <td>Flask</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Task Queue:</strong></td>
+                                        <td>Celery + Redis</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Version:</strong></td>
+                                        <td>1.0.0</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Environment:</strong></td>
+                                        <td>Development</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Last Updated:</strong></td>
+                                        <td id="lastUpdated">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="settingsToast" class="toast" role="alert">
+        <div class="toast-header">
+            <strong class="me-auto">Settings</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage">
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Check Slack status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkSlackStatus();
+    updateLastUpdated();
+});
+
+function checkSlackStatus() {
+    const statusElement = document.getElementById('slackStatus');
+    statusElement.innerHTML = '<span class="badge bg-secondary">Checking...</span>';
+    
+    fetch('/test-slack-notification', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            statusElement.innerHTML = '<span class="badge bg-success">Connected</span>';
+        } else {
+            statusElement.innerHTML = '<span class="badge bg-danger">Not Connected</span>';
+        }
+    })
+    .catch(error => {
+        statusElement.innerHTML = '<span class="badge bg-warning">Error</span>';
+    });
+}
+
+function testSlackNotification() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    button.disabled = true;
+    
+    fetch('/test-slack-notification', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Slack notification test successful!', 'success');
+        } else {
+            showToast('Slack notification test failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Network error: ' + error.message, 'error');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function sendDailySummary() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    button.disabled = true;
+    
+    fetch('/send-daily-summary', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Daily summary sent to Slack successfully!', 'success');
+        } else {
+            showToast('Failed to send daily summary: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Network error: ' + error.message, 'error');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function showToast(message, type) {
+    const toast = document.getElementById('settingsToast');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    toastMessage.textContent = message;
+    toast.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+    
+    if (type === 'success') {
+        toast.classList.add('bg-success', 'text-white');
+    } else if (type === 'error') {
+        toast.classList.add('bg-danger', 'text-white');
+    } else {
+        toast.classList.add('bg-warning');
+    }
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+}
+
+function updateLastUpdated() {
+    const now = new Date();
+    document.getElementById('lastUpdated').textContent = now.toLocaleString();
+}
+</script>
+{% endblock %}

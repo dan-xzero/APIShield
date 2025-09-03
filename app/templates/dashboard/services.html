@@ -1,0 +1,804 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Services{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">Services</h1>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-bolt"></i> Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Discovery Status Indicator -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas fa-sync-alt me-2"></i>
+                                    <strong>Auto Discovery Status:</strong>
+                                    {% if discovery_settings.enabled %}
+                                        <span class="badge bg-success">Enabled</span>
+                                        <span class="text-muted ms-2">Runs every {{ discovery_settings.interval }} hours</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Disabled</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">
+                                        <strong>Last Discovery:</strong>
+                                        {% if discovery_stats.last_run %}
+                                            {% set last_run = discovery_stats.last_run.split('T')[0] + ' ' + discovery_stats.last_run.split('T')[1][:8] %}
+                                            {{ last_run }}
+                                        {% else %}
+                                            Never
+                                        {% endif %}
+                                        {% if discovery_stats.services_discovered %}
+                                            <br><strong>Services Found:</strong> {{ discovery_stats.services_discovered }}
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-2 mb-3">
+                            <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#addServiceModal">
+                                <i class="fas fa-plus me-2"></i>Add Service
+                            </button>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#importServicesModal">
+                                <i class="fas fa-download me-2"></i>Import Services
+                            </button>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button class="btn btn-info w-100" id="refreshServicesBtn" onclick="refreshServices()">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh Services
+                            </button>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#runScanModal">
+                                <i class="fas fa-search me-2"></i>Run Scan
+                            </button>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <a href="{{ url_for('dashboard.schedules') }}" class="btn btn-secondary w-100">
+                                <i class="fas fa-calendar me-2"></i>Schedule Scan
+                            </a>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#autoDiscoveryModal">
+                                <i class="fas fa-cog me-2"></i>Auto Discovery
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+            </div>
+            
+    <!-- Services Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-server"></i> API Services
+                    </h5>
+                </div>
+                <div class="card-body">
+            {% if services %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                    <thead>
+                        <tr>
+                                        <th>Name</th>
+                                        <th>URL</th>
+                            <th>Status</th>
+                                        <th>Endpoints</th>
+                                        <th>Last Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for service in services %}
+                        <tr>
+                            <td>
+                                            <strong>{{ service.name }}</strong>
+                                            {% if service.description %}
+                                                <br><small class="text-muted">{{ service.description[:100] }}{% if service.description|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code>{{ service.url }}</code>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if service.status == 'active' else 'danger' }}">
+                                                {{ service.status.title() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info">{{ service.endpoint_count }}</span>
+                                        </td>
+                                        <td>
+                                            {{ service.updated_at.strftime('%Y-%m-%d %H:%M') if service.updated_at else 'Never' }}
+                            </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <a href="{{ url_for('dashboard.service_detail', service_id=service.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                <a href="{{ url_for('dashboard.endpoints', service=service.id) }}" 
+                                                   class="btn btn-sm btn-outline-info">
+                                                    <i class="fas fa-link"></i>
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-success" 
+                                                        onclick="runServiceScan('{{ service.id }}')">
+                                                    <i class="fas fa-search"></i>
+                                                </button>
+                                            </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                        </div>
+            {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-server fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No services found</h5>
+                            <p class="text-muted">Add your first API service to get started with security scanning.</p>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addServiceModal">
+                                <i class="fas fa-plus me-2"></i>Add Service
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Service Modal -->
+<div class="modal fade" id="addServiceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus"></i> Add New Service
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('dashboard.add_service') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="serviceName" class="form-label">Service Name</label>
+                        <input type="text" class="form-control" id="serviceName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="serviceUrl" class="form-label">API URL</label>
+                        <input type="url" class="form-control" id="serviceUrl" name="url" 
+                               placeholder="https://api.example.com/v3/api-docs" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="serviceDescription" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="serviceDescription" name="description" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Add Service
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Import Services Modal -->
+<div class="modal fade" id="importServicesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-download"></i> Import Services
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('dashboard.import_services') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="servicesFile" class="form-label">Services File (JSON/CSV)</label>
+                        <input type="file" class="form-control" id="servicesFile" name="file" accept=".json,.csv" required>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Format:</strong> JSON array of services with name, url, and description fields.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-download me-2"></i>Import Services
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Auto Discovery Modal -->
+<div class="modal fade" id="autoDiscoveryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog"></i> Automatic Service Discovery
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-clock"></i> Discovery Schedule</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableAutoDiscovery" checked>
+                            <label class="form-check-label" for="enableAutoDiscovery">
+                                Enable automatic service discovery
+                            </label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="discoveryInterval" class="form-label">Discovery Interval</label>
+                            <select class="form-select" id="discoveryInterval">
+                                <option value="30">Every 30 minutes</option>
+                                <option value="60" selected>Every hour</option>
+                                <option value="120">Every 2 hours</option>
+                                <option value="360">Every 6 hours</option>
+                                <option value="1440">Daily</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="discoverySources" class="form-label">Discovery Sources</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="discoverNgrok" checked>
+                                <label class="form-check-label" for="discoverNgrok">
+                                    Discover from ngrok tunnel
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="discoverAPIBase" checked>
+                                <label class="form-check-label" for="discoverAPIBase">
+                                    Discover from API base URL
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-history"></i> Last Discovery</h6>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p class="mb-2"><strong>Last Run:</strong> <span id="lastDiscoveryTime">Never</span></p>
+                                <p class="mb-2"><strong>Services Found:</strong> <span id="lastDiscoveryCount">0</span></p>
+                                <p class="mb-0"><strong>Status:</strong> <span id="lastDiscoveryStatus">Not configured</span></p>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-primary w-100" onclick="runDiscoveryNow()">
+                                <i class="fas fa-play me-2"></i>Run Discovery Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="saveDiscoverySettings()">
+                    <i class="fas fa-save me-2"></i>Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Run Scan Modal -->
+<div class="modal fade" id="runScanModal" tabindex="-1" aria-labelledby="runScanModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="runScanModalLabel">
+                    <i class="fas fa-search"></i> Configure Security Scan
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="runScanForm">
+                    <!-- Scan Target Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-bullseye"></i> Scan Target
+                        </label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanTarget" id="scanAllServices" value="all" checked>
+                            <label class="form-check-label" for="scanAllServices">
+                                <strong>Scan All Services</strong>
+                                <br><small class="text-muted">Run security scans on all services and their endpoints</small>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scanTarget" id="scanSpecificService" value="specific">
+                            <label class="form-check-label" for="scanSpecificService">
+                                <strong>Scan Specific Service</strong>
+                                <br><small class="text-muted">Choose a specific service to scan</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Service Selection (hidden by default) -->
+                    <div class="mb-4" id="serviceSelection" style="display: none;">
+                        <label for="serviceSelect" class="form-label fw-bold">
+                            <i class="fas fa-server"></i> Select Service
+                        </label>
+                        <select class="form-select" id="serviceSelect" name="serviceId">
+                            <option value="">Choose a service...</option>
+                            {% for service in services %}
+                            <option value="{{ service.id }}">{{ service.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Scan Type Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-tools"></i> Security Tools
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useZap" name="tools" value="zap" checked>
+                                    <label class="form-check-label" for="useZap">
+                                        <i class="fas fa-bug text-primary"></i> OWASP ZAP
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useNuclei" name="tools" value="nuclei" checked>
+                                    <label class="form-check-label" for="useNuclei">
+                                        <i class="fas fa-radiation text-warning"></i> Nuclei
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useSqlmap" name="tools" value="sqlmap">
+                                    <label class="form-check-label" for="useSqlmap">
+                                        <i class="fas fa-database text-danger"></i> SQLMap
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="useSSRFMap" name="tools" value="ssrfmap">
+                                    <label class="form-check-label" for="useSSRFMap">
+                                        <i class="fas fa-network-wired text-info"></i> SSRFMap
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scan Configuration -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-cogs"></i> Scan Configuration
+                        </label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="scanDepth" class="form-label">Scan Depth</label>
+                                <select class="form-select" id="scanDepth" name="scanDepth">
+                                    <option value="quick">Quick Scan</option>
+                                    <option value="standard" selected>Standard Scan</option>
+                                    <option value="comprehensive">Comprehensive Scan</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="timeout" class="form-label">Timeout (minutes)</label>
+                                <input type="number" class="form-control" id="timeout" name="timeout" value="30" min="5" max="120">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableNotifications" name="notifications" checked>
+                            <label class="form-check-label" for="enableNotifications">
+                                <i class="fas fa-bell"></i> Enable Slack Notifications
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="saveParameters" name="saveParameters" checked>
+                            <label class="form-check-label" for="saveParameters">
+                                <i class="fas fa-save"></i> Save Successful Parameters
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-success" id="startScanBtn">
+                    <i class="fas fa-play"></i> Start Scan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function runServiceScan(serviceId) {
+    if (confirm('Run security scan for this service?')) {
+        fetch(`/run-service-scan/${serviceId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Scan started successfully!');
+                window.location.href = '/scans';
+            } else {
+                alert('Error starting scan: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error.message);
+        });
+    }
+}
+</script>
+<script>
+// Refresh Services Function
+function refreshServices() {
+    const btn = document.getElementById('refreshServicesBtn');
+    const originalText = btn.innerHTML;
+    
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Discovering...';
+    
+    // Call the discovery API
+    fetch('/api/discover-services', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            sources: ['ngrok', 'api_base'],
+            manual: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`Service discovery completed! Found ${data.services_found} new services.`, 'success');
+            // Reload the page to show updated services
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            throw new Error(data.message || 'Discovery failed');
+        }
+    })
+    .catch(error => {
+        console.error('Error discovering services:', error);
+        showNotification('Error discovering services: ' + error.message, 'danger');
+        
+        // Reset button state
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
+
+// Run Discovery Now
+function runDiscoveryNow() {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Running...';
+    
+    // Get discovery sources
+    const sources = [];
+    if (document.getElementById('discoverNgrok').checked) sources.push('ngrok');
+    if (document.getElementById('discoverAPIBase').checked) sources.push('api_base');
+    
+    // Call the discovery API
+    fetch('/api/discover-services', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            sources: sources,
+            manual: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`Discovery completed! Found ${data.services_found} new services.`, 'success');
+            // Update the last discovery info
+            document.getElementById('lastDiscoveryTime').textContent = new Date().toLocaleString();
+            document.getElementById('lastDiscoveryCount').textContent = data.services_found;
+            document.getElementById('lastDiscoveryStatus').textContent = 'Success';
+        } else {
+            throw new Error(data.message || 'Discovery failed');
+        }
+    })
+    .catch(error => {
+        console.error('Error running discovery:', error);
+        showNotification('Error running discovery: ' + error.message, 'danger');
+    })
+    .finally(() => {
+        // Reset button state
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
+
+// Save Discovery Settings
+function saveDiscoverySettings() {
+    const enabled = document.getElementById('enableAutoDiscovery').checked;
+    const interval = document.getElementById('discoveryInterval').value;
+    const sources = [];
+    if (document.getElementById('discoverNgrok').checked) sources.push('ngrok');
+    if (document.getElementById('discoverAPIBase').checked) sources.push('api_base');
+    
+    fetch('/api/discovery-settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            enabled: enabled,
+            interval: parseInt(interval),
+            sources: sources
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Discovery settings saved successfully!', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('autoDiscoveryModal'));
+            modal.hide();
+        } else {
+            throw new Error(data.message || 'Failed to save settings');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving settings:', error);
+        showNotification('Error saving settings: ' + error.message, 'danger');
+    });
+}
+
+// Load Discovery Settings
+function loadDiscoverySettings() {
+    fetch('/api/discovery-settings')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const settings = data.settings;
+            document.getElementById('enableAutoDiscovery').checked = settings.enabled;
+            document.getElementById('discoveryInterval').value = settings.interval;
+            document.getElementById('discoverNgrok').checked = settings.sources.includes('ngrok');
+            document.getElementById('discoverAPIBase').checked = settings.sources.includes('api_base');
+            
+            // Update last discovery info
+            if (settings.last_run) {
+                document.getElementById('lastDiscoveryTime').textContent = new Date(settings.last_run).toLocaleString();
+            }
+            document.getElementById('lastDiscoveryCount').textContent = settings.last_count || 0;
+            document.getElementById('lastDiscoveryStatus').textContent = settings.last_status || 'Not configured';
+        }
+    })
+    .catch(error => {
+        console.error('Error loading discovery settings:', error);
+    });
+}
+
+// Load Discovery Stats
+function loadDiscoveryStats() {
+    fetch('/api/discovery-settings', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const settings = data.settings;
+            if (settings.last_run) {
+                const lastRun = new Date(settings.last_run);
+                document.getElementById('lastDiscoveryTime').textContent = lastRun.toLocaleString();
+            }
+            if (settings.last_count !== undefined) {
+                document.getElementById('lastDiscoveryCount').textContent = settings.last_count;
+            }
+            if (settings.last_status) {
+                document.getElementById('lastDiscoveryStatus').textContent = settings.last_status;
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error loading discovery stats:', error);
+    });
+}
+
+// Load discovery stats when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadDiscoveryStats();
+});
+
+// Notification function
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Load settings when modal opens
+document.addEventListener('DOMContentLoaded', function() {
+    const autoDiscoveryModal = document.getElementById('autoDiscoveryModal');
+    autoDiscoveryModal.addEventListener('show.bs.modal', function() {
+        loadDiscoverySettings();
+    });
+});
+
+// Run Scan Modal Logic
+document.addEventListener('DOMContentLoaded', function() {
+    const scanAllServices = document.getElementById('scanAllServices');
+    const scanSpecificService = document.getElementById('scanSpecificService');
+    const serviceSelection = document.getElementById('serviceSelection');
+    const serviceSelect = document.getElementById('serviceSelect');
+    const startScanBtn = document.getElementById('startScanBtn');
+    
+    if (scanAllServices && scanSpecificService && serviceSelection && serviceSelect && startScanBtn) {
+        // Toggle service selection visibility
+        scanAllServices.addEventListener('change', function() {
+            if (this.checked) {
+                serviceSelection.style.display = 'none';
+                serviceSelect.required = false;
+            }
+        });
+        
+        scanSpecificService.addEventListener('change', function() {
+            if (this.checked) {
+                serviceSelection.style.display = 'block';
+                serviceSelect.required = true;
+            }
+        });
+        
+        // Start scan functionality
+        startScanBtn.addEventListener('click', function() {
+            const form = document.getElementById('runScanForm');
+            const formData = new FormData(form);
+            
+            // Get selected tools
+            const selectedTools = [];
+            document.querySelectorAll('input[name="tools"]:checked').forEach(tool => {
+                selectedTools.push(tool.value);
+            });
+        
+            if (selectedTools.length === 0) {
+                alert('Please select at least one security tool.');
+                return;
+            }
+        
+            if (scanSpecificService.checked && !serviceSelect.value) {
+                alert('Please select a service to scan.');
+                return;
+            }
+        
+            // Prepare scan configuration
+            const scanConfig = {
+                target: formData.get('scanTarget'),
+                serviceId: formData.get('serviceId'),
+                tools: selectedTools,
+                scanDepth: formData.get('scanDepth'),
+                timeout: parseInt(formData.get('timeout')),
+                notifications: formData.has('notifications'),
+                saveParameters: formData.has('saveParameters')
+            };
+        
+            // Show loading state
+            startScanBtn.disabled = true;
+            startScanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting Scan...';
+        
+            // Send scan request
+            fetch('/api/start-scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(scanConfig)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Close modal and show success message
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('runScanModal'));
+                    modal.hide();
+                    
+                    // Show detailed success notification
+                    const scanDetails = data.scans ? data.scans.slice(0, 3) : []; // Show first 3 scans
+                    let detailsText = `Started ${data.scan_count} scan(s) successfully!`;
+                    
+                    if (scanDetails.length > 0) {
+                        detailsText += '\n\nFirst few scans:';
+                        scanDetails.forEach(scan => {
+                            detailsText += `\n• ${scan.service}: ${scan.endpoint}`;
+                        });
+                        if (data.scan_count > 3) {
+                            detailsText += `\n... and ${data.scan_count - 3} more`;
+                        }
+                    }
+                    
+                    showNotification(detailsText, 'success');
+                    
+                    // Show progress notification
+                    showNotification('Scans are running in the background. You can monitor progress on the Scans page.', 'info');
+                    
+                    // Redirect to scans page after a delay
+                    setTimeout(() => {
+                        window.location.href = data.redirect_url || '/scans';
+                    }, 3000);
+                } else {
+                    throw new Error(data.message || 'Failed to start scan');
+                }
+            })
+            .catch(error => {
+                console.error('Error starting scan:', error);
+                alert('Error starting scan: ' + error.message);
+                
+                // Reset button state
+                startScanBtn.disabled = false;
+                startScanBtn.innerHTML = '<i class="fas fa-play"></i> Start Scan';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,716 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Real-Time Monitoring{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-satellite-dish"></i> Real-Time API Monitoring
+        </h1>
+        <div>
+            <button class="btn btn-success btn-sm" onclick="startMonitoring()">
+                <i class="fas fa-play"></i> Start Monitoring
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="stopMonitoring()">
+                <i class="fas fa-stop"></i> Stop Monitoring
+            </button>
+        </div>
+    </div>
+
+    <!-- Real-Time Status Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Monitoring Status
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="monitoringStatus">
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-satellite-dish fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Services Monitored
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="servicesMonitored">
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Check Interval
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="checkInterval">
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Last Check
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="lastCheck">
+                                Loading...
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Panel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-cog"></i> Monitoring Configuration
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form id="monitoringConfigForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label for="checkInterval" class="form-label">Check Interval (seconds)</label>
+                                <input type="number" class="form-control" id="checkIntervalInput" name="check_interval" min="10" max="300" value="30">
+                                <small class="form-text text-muted">How often to check for API changes</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="changeThreshold" class="form-label">Change Threshold (%)</label>
+                                <input type="number" class="form-control" id="changeThreshold" name="change_threshold" min="1" max="50" step="0.1" value="10">
+                                <small class="form-text text-muted">Minimum change percentage to trigger scan</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="scanDepth" class="form-label">Scan Depth</label>
+                                <select class="form-select" id="scanDepth" name="scan_depth">
+                                    <option value="quick">Quick</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="comprehensive" selected>Comprehensive</option>
+                                </select>
+                                <small class="form-text text-muted">Depth of security scans</small>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="autoScanEnabled" class="form-label">Auto-Scanning</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="autoScanEnabled" name="auto_scan_enabled" checked>
+                                    <label class="form-check-label" for="autoScanEnabled">
+                                        Enable automatic scanning
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <label class="form-label">Security Tools</label>
+                                <div class="row">
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="toolZap" name="scan_tools" value="zap" checked>
+                                            <label class="form-check-label" for="toolZap">OWASP ZAP</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="toolNuclei" name="scan_tools" value="nuclei" checked>
+                                            <label class="form-check-label" for="toolNuclei">Nuclei</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="toolSqlmap" name="scan_tools" value="sqlmap" checked>
+                                            <label class="form-check-label" for="toolSqlmap">SQLMap</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="toolSSRFMap" name="scan_tools" value="ssrfmap" checked>
+                                            <label class="form-check-label" for="toolSSRFMap">SSRFMap</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Save Configuration
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="loadConfiguration()">
+                                    <i class="fas fa-refresh"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Baseline Management Panel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-database"></i> Baseline Management
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <p class="text-muted mb-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Baseline snapshots are used to detect API changes. Only changed endpoints are scanned automatically.
+                                <strong>Establish a baseline after initial service discovery, then enable monitoring.</strong>
+                            </p>
+                            <div class="alert alert-info">
+                                <i class="fas fa-lightbulb me-2"></i>
+                                <strong>How it works:</strong> First run creates a baseline without scanning. 
+                                Subsequent runs detect changes and scan only the specific endpoints that changed.
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success btn-lg" onclick="establishBaseline()">
+                                    <i class="fas fa-database me-2"></i>
+                                    Establish Baseline
+                                </button>
+                                <button type="button" class="btn btn-warning" onclick="resetBaseline()">
+                                    <i class="fas fa-undo me-2"></i>
+                                    Reset Baseline
+                                </button>
+                                <button type="button" class="btn btn-info" onclick="checkBaselineStatus()">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Check Status
+                                </button>
+                            </div>
+                            
+                            <hr class="my-3">
+                            
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary" id="enableScanningBtn" onclick="enableAutoScanning()" style="display: none;">
+                                    <i class="fas fa-play me-2"></i>
+                                    Enable Auto-Scanning
+                                </button>
+                                <button type="button" class="btn btn-danger" id="disableScanningBtn" onclick="disableAutoScanning()" style="display: none;">
+                                    <i class="fas fa-stop me-2"></i>
+                                    Disable Auto-Scanning
+                                </button>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <div class="alert alert-info" id="scanningStatus">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Status:</strong> <span id="scanningStatusText">Checking...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Changes Panel -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-history"></i> Recent API Changes
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="recentChangesTable">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading recent changes...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-Scan Logs -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-list-alt"></i> Auto-Scan Activity Log
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="autoScanLogs">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading auto-scan logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let monitoringStatus = null;
+let configForm = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    configForm = document.getElementById('monitoringConfigForm');
+    loadMonitoringStatus();
+    loadConfiguration();
+    loadRecentChanges();
+    loadAutoScanLogs();
+    
+    // Set up form submission
+    configForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveConfiguration();
+    });
+    
+    // Auto-refresh every 30 seconds
+    setInterval(loadMonitoringStatus, 30000);
+});
+
+function loadMonitoringStatus() {
+    fetch('/api/realtime-monitoring/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                monitoringStatus = data.status;
+                updateStatusDisplay();
+            } else {
+                showNotification('Failed to load monitoring status: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading monitoring status:', error);
+            showNotification('Error loading monitoring status', 'danger');
+        });
+}
+
+function updateStatusDisplay() {
+    if (!monitoringStatus) return;
+    
+    // Update status cards
+    document.getElementById('monitoringStatus').textContent = 
+        monitoringStatus.running ? 'Active' : 'Inactive';
+    document.getElementById('servicesMonitored').textContent = 
+        monitoringStatus.services_monitored || 0;
+    document.getElementById('checkInterval').textContent = 
+        (monitoringStatus.check_interval || 30) + 's';
+    
+    const lastCheck = monitoringStatus.last_check;
+    if (lastCheck) {
+        const date = new Date(lastCheck);
+        document.getElementById('lastCheck').textContent = 
+            date.toLocaleString();
+    } else {
+        document.getElementById('lastCheck').textContent = 'Never';
+    }
+}
+
+function loadConfiguration() {
+    fetch('/api/realtime-monitoring/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.status;
+                
+                // Update form fields
+                document.getElementById('checkIntervalInput').value = config.check_interval || 30;
+                document.getElementById('changeThreshold').value = (config.change_threshold || 0.1) * 100;
+                document.getElementById('scanDepth').value = config.scan_depth || 'comprehensive';
+                document.getElementById('autoScanEnabled').checked = config.auto_scan_enabled !== false;
+                
+                // Update tool checkboxes
+                const tools = config.scan_tools || [];
+                document.getElementById('toolZap').checked = tools.includes('zap');
+                document.getElementById('toolNuclei').checked = tools.includes('nuclei');
+                document.getElementById('toolSqlmap').checked = tools.includes('sqlmap');
+                document.getElementById('toolSSRFMap').checked = tools.includes('ssrfmap');
+                
+            } else {
+                showNotification('Failed to load configuration: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading configuration:', error);
+            showNotification('Error loading configuration', 'danger');
+        });
+}
+
+function saveConfiguration() {
+    const formData = new FormData(configForm);
+    const config = {
+        check_interval: parseInt(formData.get('check_interval')),
+        change_threshold: parseFloat(formData.get('change_threshold')) / 100,
+        scan_depth: formData.get('scan_depth'),
+        auto_scan_enabled: formData.get('auto_scan_enabled') === 'on',
+        scan_tools: []
+    };
+    
+    // Get selected tools
+    if (formData.get('scan_tools')) {
+        config.scan_tools = formData.getAll('scan_tools');
+    }
+    
+    fetch('/api/realtime-monitoring/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Configuration saved successfully!', 'success');
+            loadMonitoringStatus();
+        } else {
+            showNotification('Failed to save configuration: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving configuration:', error);
+        showNotification('Error saving configuration', 'danger');
+    });
+}
+
+function loadRecentChanges() {
+    fetch('/api/realtime-monitoring/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const changes = data.recent_changes || [];
+                displayRecentChanges(changes);
+            } else {
+                document.getElementById('recentChangesTable').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load recent changes</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading recent changes:', error);
+            document.getElementById('recentChangesTable').innerHTML = 
+                '<div class="alert alert-danger">Error loading recent changes</div>';
+        });
+}
+
+function displayRecentChanges(changes) {
+    const container = document.getElementById('recentChangesTable');
+    
+    if (changes.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">No recent API changes detected</div>';
+        return;
+    }
+    
+    let html = '<div class="table-responsive"><table class="table table-hover">';
+    html += '<thead><tr><th>Timestamp</th><th>Service</th><th>Change Type</th><th>Details</th><th>Severity</th></tr></thead><tbody>';
+    
+    changes.forEach(change => {
+        const timestamp = new Date(change.timestamp).toLocaleString();
+        const severityClass = change.severity === 'high' ? 'danger' : 
+                             change.severity === 'medium' ? 'warning' : 'info';
+        
+        // Get service name or fallback to service ID
+        const serviceName = change.service_name || change.service_id || 'Unknown Service';
+        
+        // Get affected endpoints count
+        const endpointCount = change.affected_endpoints ? change.affected_endpoints.length : 0;
+        
+        html += `<tr>
+            <td>${timestamp}</td>
+            <td>${serviceName}</td>
+            <td>${change.change_type || 'Unknown'}</td>
+            <td>${change.details || 'N/A'} ${endpointCount > 0 ? `(${endpointCount} endpoints)` : ''}</td>
+            <td><span class="badge bg-${severityClass}">${change.severity || 'Unknown'}</span></td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+function loadAutoScanLogs() {
+    // This would typically load from a separate endpoint
+    // For now, we'll show a placeholder
+    document.getElementById('autoScanLogs').innerHTML = 
+        '<div class="alert alert-info">Auto-scan logs will be displayed here. This feature is coming soon!</div>';
+}
+
+function startMonitoring() {
+    showNotification('Starting real-time monitoring...', 'info');
+    
+    fetch('/api/realtime-monitoring/start', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Real-time monitoring started successfully!', 'success');
+            // Refresh status after a short delay
+            setTimeout(() => {
+                loadMonitoringStatus();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Failed to start monitoring');
+        }
+    })
+    .catch(error => {
+        console.error('Error starting monitoring:', error);
+        showNotification('Error starting monitoring: ' + error.message, 'danger');
+    });
+}
+
+function stopMonitoring() {
+    showNotification('Stopping real-time monitoring...', 'info');
+    
+    fetch('/api/realtime-monitoring/stop', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Real-time monitoring stopped successfully!', 'warning');
+            // Refresh status after a short delay
+            setTimeout(() => {
+                loadMonitoringStatus();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Failed to stop monitoring');
+        }
+    })
+    .catch(error => {
+        console.error('Error stopping monitoring:', error);
+        showNotification('Error stopping monitoring: ' + error.message, 'danger');
+    });
+}
+
+function establishBaseline() {
+    if (!confirm('Are you sure you want to establish a new baseline? This will clear any existing baseline and create a new snapshot of current API state.')) {
+        return;
+    }
+    
+    showNotification('Establishing baseline snapshot...', 'info');
+    
+    fetch('/api/realtime-monitoring/establish-baseline', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Baseline established successfully! No scanning will occur until changes are detected.', 'success');
+            // Refresh status after a short delay
+            setTimeout(() => {
+                loadMonitoringStatus();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Failed to establish baseline');
+        }
+    })
+    .catch(error => {
+        console.error('Error establishing baseline:', error);
+        showNotification('Error establishing baseline: ' + error.message, 'danger');
+    });
+}
+
+function resetBaseline() {
+    if (!confirm('Are you sure you want to reset the baseline? This will force the system to re-establish a new baseline on the next check.')) {
+        return;
+    }
+    
+    showNotification('Resetting baseline...', 'warning');
+    
+    fetch('/api/realtime-monitoring/reset-baseline', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Baseline reset successfully! Next check will establish a new baseline.', 'success');
+            // Refresh status after a short delay
+            setTimeout(() => {
+                loadMonitoringStatus();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Failed to reset baseline');
+        }
+    })
+    .catch(error => {
+        console.error('Error resetting baseline:', error);
+        showNotification('Error resetting baseline: ' + error.message, 'danger');
+    });
+}
+
+function checkBaselineStatus() {
+    showNotification('Checking baseline status...', 'info');
+    
+    // This would typically call an endpoint to get baseline status
+    // For now, we'll show a simple message
+    setTimeout(() => {
+        showNotification('Baseline status check completed. Check the monitoring status above.', 'info');
+    }, 1000);
+}
+
+function enableAutoScanning() {
+    if (!confirm('Are you sure you want to enable auto-scanning? This will start scanning changed endpoints automatically.')) {
+        return;
+    }
+    
+    showNotification('Enabling auto-scanning...', 'info');
+    
+    fetch('/api/realtime-monitoring/enable-scanning', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Auto-scanning enabled successfully!', 'success');
+            updateScanningStatus(true);
+        } else {
+            throw new Error(data.message || 'Failed to enable auto-scanning');
+        }
+    })
+    .catch(error => {
+        console.error('Error enabling auto-scanning:', error);
+        showNotification('Error enabling auto-scanning: ' + error.message, 'danger');
+    });
+}
+
+function disableAutoScanning() {
+    if (!confirm('Are you sure you want to disable auto-scanning? This will stop all automatic scanning.')) {
+        return;
+    }
+    
+    showNotification('Disabling auto-scanning...', 'warning');
+    
+    fetch('/api/realtime-monitoring/disable-scanning', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Auto-scanning disabled successfully!', 'success');
+            updateScanningStatus(false);
+        } else {
+            throw new Error(data.message || 'Failed to disable auto-scanning');
+        }
+    })
+    .catch(error => {
+        console.error('Error disabling auto-scanning:', error);
+        showNotification('Error disabling auto-scanning: ' + error.message, 'danger');
+    });
+}
+
+function updateScanningStatus(enabled) {
+    const enableBtn = document.getElementById('enableScanningBtn');
+    const disableBtn = document.getElementById('disableScanningBtn');
+    const statusText = document.getElementById('scanningStatusText');
+    const statusDiv = document.getElementById('scanningStatus');
+    
+    if (enabled) {
+        enableBtn.style.display = 'none';
+        disableBtn.style.display = 'block';
+        statusText.textContent = 'Auto-scanning is ENABLED - scanning changed endpoints';
+        statusDiv.className = 'alert alert-success';
+    } else {
+        enableBtn.style.display = 'block';
+        disableBtn.style.display = 'none';
+        statusText.textContent = 'Auto-scanning is DISABLED - no scans will be triggered';
+        statusDiv.className = 'alert alert-warning';
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}
