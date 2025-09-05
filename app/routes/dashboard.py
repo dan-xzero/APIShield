@@ -7,7 +7,7 @@ from flask_login import login_required, current_user, login_user, logout_user
 from app import db
 from app.models import Service, ApiVersion, Endpoint, Scan, Vulnerability, ScanTarget
 from app.tasks import scan_endpoint, crawl_and_update_services
-from app.utils.slack_notifier import slack_notifier
+from app.utils.slack_notifier import slack_notifier, NotificationData, NotificationType
 from app.utils.ai_description_generator import AIDescriptionGenerator
 from app.utils.scan_scheduler import ScanScheduler
 from datetime import datetime, timedelta, timezone
@@ -599,6 +599,55 @@ def vulnerability_detail(vulnerability_id):
     
     return render_template('dashboard/vulnerability_detail.html',
                          vulnerability=vulnerability)
+
+@dashboard_bp.route('/api/vulnerability-modal/<vulnerability_id>')
+@login_required
+def vulnerability_modal(vulnerability_id):
+    """Get vulnerability details for modal"""
+    vulnerability = Vulnerability.query.get_or_404(vulnerability_id)
+    
+    # Get related scan and endpoint information
+    scan = Scan.query.get(vulnerability.scan_id) if vulnerability.scan_id else None
+    endpoint = Endpoint.query.get(vulnerability.endpoint_id) if vulnerability.endpoint_id else None
+    service = Service.query.get(vulnerability.service_id) if vulnerability.service_id else None
+    
+    return render_template('dashboard/vulnerability_modal_content.html',
+                         vulnerability=vulnerability,
+                         scan=scan,
+                         endpoint=endpoint,
+                         service=service)
+
+@dashboard_bp.route('/api/scan-modal/<scan_id>')
+@login_required
+def scan_modal(scan_id):
+    """Get scan details for modal"""
+    scan = Scan.query.get_or_404(scan_id)
+    
+    # Get related endpoint and service information
+    endpoint = Endpoint.query.get(scan.endpoint_id) if scan.endpoint_id else None
+    service = Service.query.get(endpoint.service_id) if endpoint else None
+    
+    # Get vulnerabilities for this scan
+    vulnerabilities = Vulnerability.query.filter_by(scan_id=scan_id).all()
+    
+    return render_template('dashboard/scan_modal_content.html',
+                         scan=scan,
+                         endpoint=endpoint,
+                         service=service,
+                         vulnerabilities=vulnerabilities)
+
+@dashboard_bp.route('/api/change-modal/<service_id>')
+@login_required
+def change_modal(service_id):
+    """Get change details for modal"""
+    service = Service.query.get_or_404(service_id)
+    
+    # Get recent endpoints for this service
+    endpoints = Endpoint.query.filter_by(service_id=service_id).limit(10).all()
+    
+    return render_template('dashboard/change_modal_content.html',
+                         service=service,
+                         endpoints=endpoints)
 
 @dashboard_bp.route('/api/trigger-scan/<endpoint_id>', methods=['POST'])
 @login_required
@@ -1274,7 +1323,19 @@ def send_daily_summary():
             'date': today.isoformat()
         }
         
-        success = slack_notifier.send_daily_summary(summary_data)
+        # Send daily summary notification (simplified)
+        try:
+            notification_data = NotificationData(
+                type=NotificationType.SCAN_COMPLETED,  # Use existing type
+                title='Daily Security Summary',
+                message=f'Daily scan summary: {total_vulnerabilities} vulnerabilities found across {services_scanned} services',
+                severity='warning' if total_vulnerabilities > 0 else 'info',
+                data=summary_data
+            )
+            success = slack_notifier.send_notification(notification_data)
+        except Exception as e:
+            logger.error(f"Failed to send daily summary: {e}")
+            success = False
         
         return jsonify({
             'success': success,
@@ -1381,11 +1442,18 @@ def start_scan():
             try:
                 from app.utils.slack_notifier import slack_notifier
                 target_desc = f"all {len(endpoints)} endpoints" if target == 'all' else f"service {endpoint.service.name if endpoint.service else 'Unknown'}"
-                slack_notifier.send_scan_started(
-                    target=target_desc,
-                    tools=tools,
-                    scan_count=scan_count
-                )
+                # Prepare scan data for notification
+                scan_data = {
+                    'scan_type': 'manual',
+                    'service_name': endpoint.service.name if endpoint.service else 'Unknown',
+                    'endpoint_path': target_desc,
+                    'endpoint_method': 'MULTIPLE' if target == 'all' else endpoint.method,
+                    'tools_used': tools,
+                    'scan_id': f"manual-{int(datetime.now().timestamp())}",
+                    'is_service_scan': target == 'all'
+                }
+                
+                slack_notifier.send_scan_started(scan_data)
             except Exception as e:
                 logger.warning(f"Failed to send Slack notification: {e}")
         
@@ -1455,10 +1523,19 @@ def api_discover_services():
         if services_found > 0:
             try:
                 from app.utils.slack_notifier import slack_notifier
-                slack_notifier.send_service_discovery_notification(
-                    services_found=services_found,
-                    sources=sources
+                # Send service discovery notification using the new system
+                notification_data = NotificationData(
+                    type=NotificationType.SCAN_STARTED,  # Use existing type
+                    title='Service Discovery Completed',
+                    message=f'Service discovery completed: {services_found} services found from {", ".join(sources)}',
+                    severity='info',
+                    data={
+                        'services_found': services_found,
+                        'sources': sources,
+                        'timestamp': datetime.now().isoformat()
+                    }
                 )
+                slack_notifier.send_notification(notification_data)
             except Exception as e:
                 logger.warning(f"Failed to send discovery notification: {e}")
         
@@ -1563,21 +1640,43 @@ def retry_pending_scans():
         logger.error(f"Error starting retry pending scans task: {e}")
         return jsonify({'success': False, 'message': f'Retry pending scans failed: {str(e)}'}), 500
 
+@dashboard_bp.route('/api/test-zap-compatibility', methods=['POST'])
+@login_required
+def test_zap_compatibility():
+    """API endpoint to test ZAP API compatibility"""
+    try:
+        from app.utils.scanner import test_zap_compatibility
+        
+        compatibility_results = test_zap_compatibility()
+        
+        return jsonify({
+            'success': True,
+            'compatibility': compatibility_results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing ZAP compatibility: {e}")
+        return jsonify({'success': False, 'message': f'ZAP compatibility test failed: {str(e)}'}), 500
+
 
 @dashboard_bp.route('/api/realtime-monitoring/status', methods=['GET'])
 @login_required
 def realtime_monitoring_status():
     """API endpoint to get real-time monitoring status"""
     try:
-        from app.utils.realtime_monitor import get_realtime_status, get_recent_changes
+        from app.utils.realtime_monitor import get_realtime_status, get_recent_changes, get_scan_activity_log, get_baseline_status
         
         status = get_realtime_status()
         recent_changes = get_recent_changes(hours=24)
+        scan_activity = get_scan_activity_log(hours=24)
+        baseline_status = get_baseline_status()
         
         return jsonify({
             'success': True,
             'status': status,
-            'recent_changes': recent_changes
+            'recent_changes': recent_changes,
+            'scan_activity': scan_activity,
+            'baseline_status': baseline_status
         })
         
     except Exception as e:
@@ -1761,3 +1860,64 @@ def scan_management_status():
     except Exception as e:
         logger.error(f"Error getting scan status: {e}")
         return jsonify({'success': False, 'message': f'Status check failed: {str(e)}'}), 500
+
+
+@dashboard_bp.route('/api/data-cleanup/sync', methods=['POST'])
+@login_required
+def sync_with_portal():
+    """API endpoint to synchronize database with portal"""
+    try:
+        from app.utils.data_cleanup import data_cleanup_manager
+        
+        logger.info("Starting portal synchronization...")
+        results = data_cleanup_manager.sync_with_portal()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Portal synchronization completed',
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error during portal sync: {e}")
+        return jsonify({'success': False, 'message': f'Sync failed: {str(e)}'}), 500
+
+
+@dashboard_bp.route('/api/data-cleanup/cleanup', methods=['POST'])
+@login_required
+def cleanup_database():
+    """API endpoint to perform database cleanup"""
+    try:
+        from app.utils.data_cleanup import data_cleanup_manager
+        
+        logger.info("Starting database cleanup...")
+        results = data_cleanup_manager.full_cleanup()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Database cleanup completed',
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error during database cleanup: {e}")
+        return jsonify({'success': False, 'message': f'Cleanup failed: {str(e)}'}), 500
+
+
+@dashboard_bp.route('/api/data-cleanup/stats', methods=['GET'])
+@login_required
+def get_database_stats():
+    """API endpoint to get database statistics"""
+    try:
+        from app.utils.data_cleanup import data_cleanup_manager
+        
+        stats = data_cleanup_manager.get_database_stats()
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting database stats: {e}")
+        return jsonify({'success': False, 'message': f'Stats retrieval failed: {str(e)}'}), 500

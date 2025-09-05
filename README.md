@@ -35,6 +35,42 @@ APIShield is a comprehensive, real-time API security monitoring and vulnerabilit
 - **Redis Backend**: High-performance caching and message queuing
 - **Multi-User Support**: Role-based access control and user management
 
+## 🔒 Security Setup
+
+### ⚠️ **Important Security Notice**
+APIShield requires secure configuration before use. The system no longer uses hardcoded passwords for security reasons.
+
+### 🔐 **Initial Admin Setup**
+1. **Create Environment File**:
+   ```bash
+   cp env.template .env
+   ```
+
+2. **Generate Secure Secret Key**:
+   ```bash
+   python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))"
+   ```
+   Add this to your `.env` file.
+
+3. **Create Admin User**:
+   ```bash
+   python setup_admin.py
+   ```
+   This will prompt you to create a secure admin password with strong requirements.
+
+4. **Set Admin Password in Environment**:
+   Add the password you created to your `.env` file:
+   ```
+   ADMIN_PASSWORD=your-secure-password-here
+   ```
+
+### 🛡️ **Password Requirements**
+- Minimum 8 characters
+- At least one uppercase letter
+- At least one lowercase letter  
+- At least one digit
+- At least one special character
+
 ## 🚀 Quick Start
 
 ### Prerequisites

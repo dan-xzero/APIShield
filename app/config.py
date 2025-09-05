@@ -28,9 +28,13 @@ class Config:
     
     # Authentication
     ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
-    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin')
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')  # Must be set via environment variable
     SESSION_TIMEOUT = int(os.getenv('SESSION_TIMEOUT', 3600))
     MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', 5))
+    
+    # Security: Require strong password in production
+    MIN_PASSWORD_LENGTH = int(os.getenv('MIN_PASSWORD_LENGTH', 8))
+    REQUIRE_STRONG_PASSWORD = os.getenv('REQUIRE_STRONG_PASSWORD', 'True').lower() == 'true'
     
     # Slack Configuration
     SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')

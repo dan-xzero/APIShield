@@ -270,6 +270,30 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                 tools_to_use = scan_config_dict.get('tools', ['zap', 'nuclei'])
                 logger.info(f"🔍 Starting security scan with tools: {tools_to_use}")
                 
+                # Send scan started notification
+                try:
+                    from app.utils.slack_notifier import slack_notifier
+                    
+                    # Check if this is an auto-triggered scan
+                    is_auto_scan = scan_config_dict.get('auto_triggered', False)
+                    scan_type = 'Auto-Scan' if is_auto_scan else 'Manual Scan'
+                    
+                    # Prepare scan data for notification
+                    scan_data = {
+                        'scan_type': scan_type.lower().replace('-', '_'),
+                        'service_name': endpoint.service.name if endpoint.service else 'Unknown',
+                        'endpoint_path': endpoint.path,
+                        'endpoint_method': endpoint.method,
+                        'tools_used': tools_to_use,
+                        'scan_id': str(scan.id),
+                        'is_service_scan': False
+                    }
+                    
+                    slack_notifier.send_scan_started(scan_data)
+                    logger.info(f"✅ Scan started notification sent")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to send scan started notification: {e}")
+                
                 # Run scans for each selected tool
                 scan_results = {
                     'vulnerabilities': [],
@@ -370,11 +394,34 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                     logger.info(f"✅ All vulnerabilities processed with duplicate prevention")
                 
                 # Send Slack notification
-                # logger.info(f"📢 Sending Slack notification...")
-                # # notifier = SlackNotifier()  # Removed slack integration
-                # # dashboard_url = f"http://localhost:5000/endpoints/{endpoint.id}"
-                # # notifier.send_scan_results(scan_results, dashboard_url)
-                # logger.info(f"✅ Slack notification sent")
+                logger.info(f"📢 Sending Slack notification...")
+                try:
+                    from app.utils.slack_notifier import slack_notifier
+                    
+                    # Prepare scan completion data for notification
+                    completion_data = {
+                        'scan_type': scan_type.lower().replace('-', '_'),
+                        'service_name': endpoint.service.name if endpoint.service else 'Unknown',
+                        'endpoint_path': endpoint.path,
+                        'endpoint_method': endpoint.method,
+                        'scan_id': str(scan.id),
+                        'duration': scan_results.get('duration', 0),
+                        'tools_used': scan_results.get('tools_used', []),
+                        'vulnerabilities': vulnerabilities,
+                        'is_service_scan': False
+                    }
+                    
+                    slack_notifier.send_scan_completed(completion_data)
+                    
+                    # Send individual vulnerability alerts only for high-risk findings
+                    # The SlackNotifier now handles deduplication automatically
+                    for vuln in vulnerabilities:
+                        if vuln.get('severity', '').lower() in ['high', 'critical']:
+                            vuln['scan_id'] = str(scan.id)
+                            slack_notifier.send_vulnerability_alert(vuln)
+                    logger.info(f"✅ Slack notification sent")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to send Slack notification: {e}")
                 
                 logger.info(f"🎉 Scan completed for endpoint {endpoint.id}: {len(vulnerabilities)} vulnerabilities found")
                 

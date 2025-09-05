@@ -23,9 +23,19 @@ install_and_run.bat
 4. **🚀 Starts the application** automatically
 5. **🌐 Opens dashboard** at `http://localhost:5001`
 
-## **Default Login:**
-- **Username:** `admin`
-- **Password:** `secure_password_change_this`
+## **🔒 Security Setup Required:**
+Before using APIShield, you must set up secure authentication:
+
+1. **Create Admin User:**
+   ```bash
+   python setup_admin.py
+   ```
+
+2. **Set Environment Variables:**
+   ```bash
+   export ADMIN_PASSWORD="your-secure-password"
+   export SECRET_KEY="your-secret-key"
+   ```
 
 ## **Alternative Options:**
 

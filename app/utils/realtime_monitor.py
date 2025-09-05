@@ -273,7 +273,7 @@ class RealTimeMonitor:
                 ).outerjoin(Endpoint).group_by(Service.id).all()
                 
                 # Convert to list of dictionaries
-                services = [
+                services_list = [
                     {
                         'id': service.id,
                         'name': service.name, 
@@ -284,11 +284,17 @@ class RealTimeMonitor:
                     for service in services
                 ]
                 
-                logger.info(f"Flask app context: Found {len(services)} services")
+                logger.info(f"Flask app context: Found {len(services_list)} services")
+                
+                # Commit the transaction to ensure data is available
+                db.session.commit()
+                
+                # Use the services_list from Flask app context
+                services = services_list
                 
             except Exception as e:
                 # Fallback to direct database connection if no app context
-                logger.warning("No Flask app context, using direct database connection")
+                logger.warning(f"No Flask app context, using direct database connection: {e}")
                 import sqlite3
                 conn = sqlite3.connect(self.db_path)
                 cursor = conn.cursor()
@@ -318,7 +324,7 @@ class RealTimeMonitor:
                     LEFT OUTER JOIN endpoints e ON s.id = e.service_id 
                     GROUP BY s.id
                 """)
-                services = cursor.fetchall()
+                services_data = cursor.fetchall()
                 
                 # Convert to list of dictionaries
                 services = [
@@ -329,13 +335,14 @@ class RealTimeMonitor:
                         'created_at': row[3],
                         'endpoint_count': row[4]
                     }
-                    for row in services
+                    for row in services_data
                 ]
                 
                 conn.close()
                 
                 # Calculate hashes for change detection
                 state = {}
+                logger.info(f"Processing {len(services)} services for state creation")
                 for service in services:
                     # Get detailed endpoint information for this service
                     try:
@@ -410,10 +417,13 @@ class RealTimeMonitor:
                         'timestamp': datetime.now(timezone.utc)
                     }
                 
+                logger.info(f"Successfully created state for {len(state)} services")
                 return state
                 
         except Exception as e:
             logger.error(f"Error getting current API state: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {}
     
     def _detect_changes(self, current_state: Dict) -> List[Dict]:
@@ -434,16 +444,16 @@ class RealTimeMonitor:
                 })
                 continue
             
+            # Initialize variables for endpoint changes
+            changed_endpoints = []
+            new_endpoints = []
+            removed_endpoints = []
+            
             # Check for endpoint-level changes
             if current_service['endpoints_hash'] != previous_snapshot.endpoints_hash:
                 # Get previous endpoint details from snapshot
                 previous_endpoints = getattr(previous_snapshot, 'endpoints', [])
                 current_endpoints = current_service['endpoints']
-                
-                # Find changed endpoints by comparing hashes
-                changed_endpoints = []
-                new_endpoints = []
-                removed_endpoints = []
                 
                 # Create lookup dictionaries for efficient comparison
                 current_ep_lookup = {ep['path'] + ':' + ep['method']: ep for ep in current_endpoints}
@@ -489,18 +499,16 @@ class RealTimeMonitor:
                         'affected_endpoints': removed_endpoints
                     })
             
-            # Check for significant changes (above threshold)
-            if previous_snapshot.endpoint_count > 0:
+            # Check for significant changes (above threshold) - but only if no specific endpoint changes were detected
+            if previous_snapshot.endpoint_count > 0 and not changed_endpoints and not new_endpoints and not removed_endpoints:
                 change_percentage = abs(current_service['endpoint_count'] - previous_snapshot.endpoint_count) / previous_snapshot.endpoint_count
                 
                 if change_percentage >= self.change_threshold:
-                    changes.append({
-                        'service_id': service_id,
-                        'change_type': 'significant_changes',
-                        'details': f"Significant changes detected: {change_percentage:.1%} change",
-                        'severity': 'high',
-                        'affected_endpoints': current_service['endpoints']  # All endpoints for significant changes
-                    })
+                    # Only scan endpoints that actually changed, not all endpoints
+                    # This prevents full service scans when only a few endpoints changed
+                    logger.warning(f"Significant change detected ({change_percentage:.1%}) but no specific endpoint changes found - this may indicate a detection issue")
+                    # Don't add this change to avoid full service scans
+                    # Instead, log it for investigation
         
         return changes
     
@@ -597,12 +605,21 @@ class RealTimeMonitor:
                     # Send notification about auto-scanning
                     try:
                         from app.utils.slack_notifier import slack_notifier
-                        slack_notifier.send_auto_scan_notification(
-                            service_name=service.name,
-                            endpoint_count=len(affected_endpoints),
-                            change_type=change['change_type'],
-                            severity=change['severity']
-                        )
+                        # Send auto-scan notification using the new system
+                        scan_data = {
+                            'scan_type': 'auto',
+                            'service_name': service.name,
+                            'endpoint_path': f"Service-wide scan ({len(affected_endpoints)} endpoints)",
+                            'endpoint_method': 'MULTIPLE',
+                            'tools_used': ['ZAP', 'Nuclei', 'SQLMap'],
+                            'scan_id': f"auto-{int(time.time())}",
+                            'is_service_scan': True,
+                            'endpoint_count': len(affected_endpoints),
+                            'change_type': change['change_type'],
+                            'severity': change['severity']
+                        }
+                        
+                        slack_notifier.send_scan_started(scan_data)
                     except Exception as e:
                         logger.warning(f"Failed to send auto-scan notification: {e}")
                         
@@ -701,6 +718,114 @@ class RealTimeMonitor:
                 changes.append(change_info)
         
         return sorted(changes, key=lambda x: x['timestamp'], reverse=True)
+    
+    def get_scan_activity_log(self, hours: int = 24) -> List[Dict]:
+        """Get recent scan activity from database"""
+        try:
+            from app import create_app, db
+            from app.models import Scan, Endpoint, Service, Vulnerability
+            
+            app = create_app()
+            with app.app_context():
+                cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+                
+                # Get recent scans with related data (all scan types, not just auto)
+                scans = db.session.query(Scan, Endpoint, Service).join(
+                    Endpoint, Scan.endpoint_id == Endpoint.id
+                ).join(
+                    Service, Endpoint.service_id == Service.id
+                ).filter(
+                    Scan.scan_time >= cutoff_time
+                ).order_by(Scan.scan_time.desc()).limit(50).all()  # Limit to recent 50 scans
+                
+                scan_logs = []
+                for scan, endpoint, service in scans:
+                    # Get vulnerability count for this scan
+                    vuln_count = db.session.query(db.func.count(Vulnerability.id)).filter(
+                        Vulnerability.scan_id == scan.id
+                    ).scalar() or 0
+                    
+                    # Check if auto-triggered
+                    auto_triggered = False
+                    try:
+                        if scan.scan_config:
+                            import json
+                            config = json.loads(scan.scan_config) if isinstance(scan.scan_config, str) else scan.scan_config
+                            auto_triggered = config.get('auto_triggered', False)
+                    except:
+                        pass
+                    
+                    scan_log = {
+                        'scan_id': scan.id,
+                        'timestamp': scan.scan_time.isoformat(),
+                        'service_name': service.name,
+                        'endpoint_path': endpoint.path,
+                        'endpoint_method': endpoint.method,
+                        'status': scan.status,
+                        'scan_type': scan.scan_type,
+                        'duration': scan.duration,
+                        'vulnerabilities_found': vuln_count,
+                        'auto_triggered': auto_triggered,
+                        'tools_used': scan.tools_used,
+                        'scan_config': scan.scan_config
+                    }
+                    scan_logs.append(scan_log)
+                
+                return scan_logs
+                
+        except Exception as e:
+            logger.error(f"Error getting scan activity log: {e}")
+            return []
+    
+    def get_baseline_status(self) -> Dict:
+        """Get detailed baseline status information"""
+        try:
+            status = {
+                'baseline_established': len(self.snapshots) > 0,
+                'services_with_baseline': len(self.snapshots),
+                'auto_scan_enabled': self.auto_scan_enabled,
+                'last_baseline_update': None,
+                'baseline_details': []
+            }
+            
+            if self.snapshots:
+                # Get the most recent snapshot timestamp
+                latest_timestamp = max(snapshot.timestamp for snapshot in self.snapshots.values())
+                status['last_baseline_update'] = latest_timestamp.isoformat()
+                
+                # Get baseline details for each service
+                for service_id, snapshot in self.snapshots.items():
+                    try:
+                        from app import create_app, db
+                        from app.models import Service
+                        
+                        app = create_app()
+                        with app.app_context():
+                            service = Service.query.get(service_id)
+                            if service:
+                                baseline_detail = {
+                                    'service_id': service_id,
+                                    'service_name': service.name,
+                                    'endpoint_count': snapshot.endpoint_count,
+                                    'baseline_timestamp': snapshot.timestamp.isoformat(),
+                                    'changes_detected': snapshot.changes_detected,
+                                    'scan_triggered': snapshot.scan_triggered
+                                }
+                                status['baseline_details'].append(baseline_detail)
+                    except Exception as e:
+                        logger.warning(f"Could not get service details for baseline: {e}")
+            
+            return status
+            
+        except Exception as e:
+            logger.error(f"Error getting baseline status: {e}")
+            return {
+                'baseline_established': False,
+                'services_with_baseline': 0,
+                'auto_scan_enabled': False,
+                'last_baseline_update': None,
+                'baseline_details': []
+            }
 
 # Global real-time monitor instance
 realtime_monitor = RealTimeMonitor()
@@ -724,6 +849,14 @@ def get_realtime_status() -> Dict:
 def get_recent_changes(hours: int = 24) -> List[Dict]:
     """Get recent API changes"""
     return realtime_monitor.get_recent_changes(hours)
+
+def get_scan_activity_log(hours: int = 24) -> List[Dict]:
+    """Get recent scan activity log"""
+    return realtime_monitor.get_scan_activity_log(hours)
+
+def get_baseline_status() -> Dict:
+    """Get detailed baseline status"""
+    return realtime_monitor.get_baseline_status()
 
 def establish_baseline():
     """Establish baseline snapshot without scanning"""

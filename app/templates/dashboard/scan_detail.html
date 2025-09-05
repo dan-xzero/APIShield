@@ -8,9 +8,14 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h1 class="h3 mb-0">Scan Details</h1>
-                <a href="{{ url_for('dashboard.scans') }}" class="btn btn-outline-secondary">
-                    <i class="fas fa-arrow-left"></i> Back to Scans
-                </a>
+                <div>
+                    <button class="btn btn-primary me-2" onclick="generateScanReport()">
+                        <i class="fas fa-file-pdf"></i> Generate Report
+                    </button>
+                    <a href="{{ url_for('dashboard.scans') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Scans
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -71,7 +76,7 @@
                             </div>
                             <div class="mb-3">
                                 <strong>Duration:</strong>
-                                <span>{{ scan.duration }}s</span> if scan.duration else 'N/A'
+                                <span>{% if scan.duration %}{{ scan.duration }}s{% else %}N/A{% endif %}</span>
                             </div>
                         </div>
                     </div>
@@ -282,4 +287,212 @@
         </div>
     </div>
 </div>
+
+<!-- Scan Report Modal -->
+<div class="modal fade" id="scanReportModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-pdf"></i> Scan Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="scanReportContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Generating report...</span>
+                    </div>
+                    <p class="mt-2">Generating scan report...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadScanReport()">
+                    <i class="fas fa-download"></i> Download PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function generateScanReport() {
+    const modal = new bootstrap.Modal(document.getElementById('scanReportModal'));
+    modal.show();
+    
+    // Generate report content
+    const reportContent = generateReportContent();
+    document.getElementById('scanReportContent').innerHTML = reportContent;
+}
+
+function generateReportContent() {
+    const scanId = '{{ scan.id }}';
+    const scanType = '{{ scan.scan_type }}';
+    const status = '{{ scan.status }}';
+    const scanTime = '{{ scan.scan_time.strftime("%Y-%m-%d %H:%M:%S") if scan.scan_time else "N/A" }}';
+    const duration = '{{ scan.duration }}s{% if not scan.duration %}N/A{% endif %}';
+    const endpoint = '{{ scan.endpoint.path if scan.endpoint else "Unknown" }}';
+    const service = '{{ scan.endpoint.service.name if scan.endpoint and scan.endpoint.service else "Unknown" }}';
+    const vulnerabilities = {{ vulnerabilities|length }};
+    const highRisk = {{ vulnerabilities|selectattr('severity', 'equalto', 'high')|list|length }};
+    const mediumRisk = {{ vulnerabilities|selectattr('severity', 'equalto', 'medium')|list|length }};
+    const lowRisk = {{ vulnerabilities|selectattr('severity', 'equalto', 'low')|list|length }};
+    
+    return `
+        <div class="scan-report">
+            <div class="report-header text-center mb-4">
+                <h2><i class="fas fa-shield-alt"></i> API Security Scan Report</h2>
+                <p class="text-muted">Generated on ${new Date().toLocaleString()}</p>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-info-circle"></i> Scan Information</h5>
+                    <table class="table table-sm">
+                        <tr><td><strong>Scan ID:</strong></td><td><code>${scanId}</code></td></tr>
+                        <tr><td><strong>Scan Type:</strong></td><td><span class="badge bg-info">${scanType}</span></td></tr>
+                        <tr><td><strong>Status:</strong></td><td><span class="badge bg-${status === 'completed' ? 'success' : status === 'running' ? 'warning' : 'danger'}">${status.toUpperCase()}</span></td></tr>
+                        <tr><td><strong>Scan Time:</strong></td><td>${scanTime}</td></tr>
+                        <tr><td><strong>Duration:</strong></td><td>${duration}</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h5><i class="fas fa-target"></i> Target Information</h5>
+                    <table class="table table-sm">
+                        <tr><td><strong>Endpoint:</strong></td><td><code>${endpoint}</code></td></tr>
+                        <tr><td><strong>Service:</strong></td><td>${service}</td></tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h5><i class="fas fa-chart-bar"></i> Vulnerability Summary</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-primary">${vulnerabilities}</h3>
+                                    <p class="mb-0">Total Vulnerabilities</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-danger">${highRisk}</h3>
+                                    <p class="mb-0">High Risk</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-warning">${mediumRisk}</h3>
+                                    <p class="mb-0">Medium Risk</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <h3 class="text-info">${lowRisk}</h3>
+                                    <p class="mb-0">Low Risk</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-12">
+                    <h5><i class="fas fa-exclamation-triangle"></i> Detailed Findings</h5>
+                    {% if vulnerabilities %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Vulnerability</th>
+                                        <th>Severity</th>
+                                        <th>Category</th>
+                                        <th>CVSS Score</th>
+                                        <th>Risk Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for vulnerability in vulnerabilities %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ vulnerability.name }}</strong>
+                                            {% if vulnerability.description %}
+                                                <br><small class="text-muted">{{ vulnerability.description[:100] }}{% if vulnerability.description|length > 100 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'danger' if vulnerability.severity == 'high' else 'warning' if vulnerability.severity == 'medium' else 'info' if vulnerability.severity == 'low' else 'secondary' }}">
+                                                {{ vulnerability.severity.upper() }}
+                                            </span>
+                                        </td>
+                                        <td>{{ vulnerability.category or 'Unknown' }}</td>
+                                        <td>{{ vulnerability.cvss_score or 'N/A' }}</td>
+                                        <td>{{ vulnerability.risk_score or 'N/A' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i> No vulnerabilities found in this scan.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h5><i class="fas fa-lightbulb"></i> Recommendations</h5>
+                    <div class="alert alert-info">
+                        <ul class="mb-0">
+                            <li>Review all identified vulnerabilities and prioritize based on severity</li>
+                            <li>Implement proper input validation and sanitization</li>
+                            <li>Ensure all endpoints use HTTPS and proper authentication</li>
+                            <li>Regularly update security tools and dependencies</li>
+                            <li>Conduct regular security assessments</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function downloadScanReport() {
+    // This would typically generate and download a PDF
+    // For now, we'll show a notification
+    showNotification('Report download functionality will be implemented with PDF generation library', 'info');
+}
+
+function showNotification(message, type = 'info') {
+    // Create a simple notification
+    const alertClass = type === 'success' ? 'alert-success' : type === 'error' ? 'alert-danger' : 'alert-info';
+    const notification = document.createElement('div');
+    notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 5000);
+}
+</script>
 {% endblock %}

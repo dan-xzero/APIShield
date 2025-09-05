@@ -10,7 +10,7 @@ from croniter import croniter
 from app import db
 from app.models import ScanSchedule, Service, Endpoint, Scan
 from app.utils.scanner import SecurityScanner
-from app.utils.slack_notifier import slack_notifier
+from app.utils.slack_notifier import slack_notifier, NotificationData, NotificationType
 from app.utils.enhanced_parameter_generator import EnhancedParameterGenerator
 
 logger = logging.getLogger(__name__)
@@ -327,7 +327,19 @@ class ScanScheduler:
             
             # Send schedule execution notification
             service_name = schedule.service.name if schedule.service else 'Unknown Service'
-            slack_notifier.send_schedule_executed(schedule.name, service_name, 0, 0)
+            # Send schedule execution notification using the new system
+            notification_data = NotificationData(
+                type=NotificationType.SCAN_STARTED,
+                title='Scheduled Scan Executed',
+                message=f'Scheduled scan "{schedule.name}" executed for service: {service_name}',
+                severity='info',
+                data={
+                    'schedule_name': schedule.name,
+                    'service_name': service_name,
+                    'timestamp': datetime.now().isoformat()
+                }
+            )
+            slack_notifier.send_notification(notification_data)
             
             # Run the scan
             result = self._run_scheduled_scan(schedule)
@@ -340,12 +352,23 @@ class ScanScheduler:
             db.session.commit()
             
             # Send final schedule execution notification with results
-            slack_notifier.send_schedule_executed(
-                schedule.name, 
-                service_name, 
-                result.get('scans_run', 0), 
-                result.get('vulnerabilities_found', 0)
+            scans_run = result.get('scans_run', 0)
+            vulnerabilities_found = result.get('vulnerabilities_found', 0)
+            
+            notification_data = NotificationData(
+                type=NotificationType.SCAN_COMPLETED,
+                title='Scheduled Scan Completed',
+                message=f'Scheduled scan "{schedule.name}" completed for {service_name}: {vulnerabilities_found} vulnerabilities found',
+                severity='warning' if vulnerabilities_found > 0 else 'info',
+                data={
+                    'schedule_name': schedule.name,
+                    'service_name': service_name,
+                    'scans_run': scans_run,
+                    'vulnerabilities_found': vulnerabilities_found,
+                    'timestamp': datetime.now().isoformat()
+                }
             )
+            slack_notifier.send_notification(notification_data)
             
             return result
             

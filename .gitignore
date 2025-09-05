@@ -492,6 +492,39 @@ notification_logs/
 slack_logs/
 email_logs/
 
+# Test files
+test_*.py
+*_test.py
+test_*.sh
+test_*.bat
+
+# Temporary scan files
+/tmp/zap_scan_response
+/tmp/nuclei_output.json
+/tmp/sqlmap_output.json
+/tmp/ssrfmap_output.json
+/tmp/xsstrike_output.json
+
+# ZAP session files
+*.session
+*.session.*
+
+# Nuclei output files
+nuclei_output.json
+nuclei_output.txt
+
+# SQLMap output files
+sqlmap_output.json
+sqlmap_output.txt
+
+# SSRFMap output files
+ssrfmap_output.json
+ssrfmap_output.txt
+
+# XSStrike output files
+xsstrike_output.json
+xsstrike_output.txt
+
 # =============================================================================
 # IGNORE EXCEPTIONS
 # =============================================================================
@@ -522,3 +555,73 @@ email_logs/
 !templates/
 !templates/**/*
 
+# Keep security setup files
+!setup_admin.py
+!env.template
+
+# Cache and temporary files
+cookies.txt
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# JSON cache and config files (but keep templates)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!*.template.json
+
+# Browser and session files
+cookies.txt
+session.txt
+*.session
+*.session.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+.env.staging
+secrets.json
+config.json
+
+# Application-specific cache files
+ai_cache.json
+discovery_config.json
+realtime_config.json
+scan_cache/
+vulnerability_cache/
+data/

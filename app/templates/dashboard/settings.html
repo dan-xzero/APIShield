@@ -191,6 +191,55 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <hr>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>ZAP Status</h6>
+                            <div id="zapStatus">
+                                <span class="badge bg-secondary">Not tested</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Quick Actions</h6>
+                            <button class="btn btn-primary btn-sm me-2" onclick="testZapCompatibility()">
+                                <i class="fas fa-vial"></i> Test ZAP Compatibility
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="showZapInfo()">
+                                <i class="fas fa-info-circle"></i> ZAP Info
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="zapCompatibilityResults" style="display: none;">
+                        <h6 class="mt-3">Compatibility Test Results</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Component</th>
+                                        <th>Status</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="zapCompatibilityTable">
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div id="zapIssues" style="display: none;">
+                            <h6 class="text-danger mt-3">Issues Found</h6>
+                            <ul id="zapIssuesList" class="text-danger">
+                            </ul>
+                        </div>
+                        
+                        <div id="zapRecommendations" style="display: none;">
+                            <h6 class="text-info mt-3">Recommendations</h6>
+                            <ul id="zapRecommendationsList" class="text-info">
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -374,6 +423,123 @@ function showToast(message, type) {
 function updateLastUpdated() {
     const now = new Date();
     document.getElementById('lastUpdated').textContent = now.toLocaleString();
+}
+
+function testZapCompatibility() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    button.disabled = true;
+    
+    // Update status
+    document.getElementById('zapStatus').innerHTML = '<span class="badge bg-warning">Testing...</span>';
+    
+    fetch('/api/test-zap-compatibility', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayZapCompatibilityResults(data.compatibility);
+            document.getElementById('zapStatus').innerHTML = '<span class="badge bg-success">Compatible</span>';
+        } else {
+            document.getElementById('zapStatus').innerHTML = '<span class="badge bg-danger">Test Failed</span>';
+            showToast('ZAP compatibility test failed: ' + (data.message || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        document.getElementById('zapStatus').innerHTML = '<span class="badge bg-danger">Error</span>';
+        showToast('Network error: ' + error.message, 'error');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function displayZapCompatibilityResults(compatibility) {
+    const resultsDiv = document.getElementById('zapCompatibilityResults');
+    const tableBody = document.getElementById('zapCompatibilityTable');
+    const issuesDiv = document.getElementById('zapIssues');
+    const issuesList = document.getElementById('zapIssuesList');
+    const recommendationsDiv = document.getElementById('zapRecommendations');
+    const recommendationsList = document.getElementById('zapRecommendationsList');
+    
+    // Clear previous results
+    tableBody.innerHTML = '';
+    issuesList.innerHTML = '';
+    recommendationsList.innerHTML = '';
+    
+    // Display component status
+    const components = [
+        { key: 'zap_accessible', name: 'ZAP Accessibility', description: 'Basic ZAP connectivity' },
+        { key: 'api_key_valid', name: 'API Key', description: 'ZAP API key validation' },
+        { key: 'context_views_working', name: 'Context Views', description: 'Context information retrieval' },
+        { key: 'context_actions_working', name: 'Context Actions', description: 'Context management operations' },
+        { key: 'spider_views_working', name: 'Spider Views', description: 'Spider scan monitoring' },
+        { key: 'ascan_views_working', name: 'Active Scan Views', description: 'Active scan monitoring' },
+        { key: 'core_views_working', name: 'Core Views', description: 'Core ZAP functionality' }
+    ];
+    
+    components.forEach(component => {
+        const status = compatibility[component.key];
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${component.name}</td>
+            <td>
+                <span class="badge bg-${status ? 'success' : 'danger'}">
+                    ${status ? 'Working' : 'Not Working'}
+                </span>
+            </td>
+            <td>${component.description}</td>
+        `;
+        tableBody.appendChild(row);
+    });
+    
+    // Display issues if any
+    if (compatibility.issues && compatibility.issues.length > 0) {
+        issuesDiv.style.display = 'block';
+        compatibility.issues.forEach(issue => {
+            const li = document.createElement('li');
+            li.textContent = issue;
+            issuesList.appendChild(li);
+        });
+    } else {
+        issuesDiv.style.display = 'none';
+    }
+    
+    // Display recommendations if any
+    if (compatibility.recommendations && compatibility.recommendations.length > 0) {
+        recommendationsDiv.style.display = 'block';
+        compatibility.recommendations.forEach(recommendation => {
+            const li = document.createElement('li');
+            li.textContent = recommendation;
+            recommendationsList.appendChild(li);
+        });
+    } else {
+        recommendationsDiv.style.display = 'none';
+    }
+    
+    // Show results
+    resultsDiv.style.display = 'block';
+}
+
+function showZapInfo() {
+    const info = `
+ZAP (OWASP Zed Attack Proxy) is a web application security scanner used for finding vulnerabilities in web applications.
+
+Common Issues:
+• "Bad View" errors: Usually indicate ZAP version compatibility issues
+• API key problems: Check ZAP configuration and API key settings
+• Context view failures: May require fallback context handling
+
+The scanner automatically handles most compatibility issues, but you can run this test to identify specific problems.
+    `;
+    
+    alert(info);
 }
 </script>
 {% endblock %}

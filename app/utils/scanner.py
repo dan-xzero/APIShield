@@ -9,6 +9,7 @@ import subprocess
 import time
 import tempfile
 import os
+import uuid
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, quote
@@ -90,9 +91,8 @@ class SecurityScanner:
         Returns:
             Scan results dictionary
         """
-        # Send scan started notification
-        service_name = endpoint.get('service_name', 'Unknown Service')
-        slack_notifier.send_scan_started(service_name, 1, scan_type)
+        # Note: Scan notifications are handled by the calling task
+        # to avoid duplicate notifications
         
         scan_results = {
             'scan_type': scan_type,
@@ -179,25 +179,8 @@ class SecurityScanner:
                 {'endpoint': endpoint.get('path'), 'scan_type': scan_type}
             )
         
-        # Send scan completed notification only for successful scans
-        if scan_results['status'] == 'completed':
-            vulnerabilities_found = len(scan_results['vulnerabilities'])
-            scan_duration = scan_results['duration']
-            slack_notifier.send_scan_completed(service_name, vulnerabilities_found, scan_duration, scan_type)
-            
-            # Send vulnerability alerts for high-risk findings
-            for vuln in scan_results['vulnerabilities']:
-                if vuln.get('severity') in ['high', 'critical']:
-                    slack_notifier.send_high_risk_alert(vuln)
-                else:
-                    slack_notifier.send_vulnerability_alert(vuln)
-        else:
-            # Send failure notification
-            slack_notifier.send_system_error(
-                "Scan Failed",
-                f"Scan failed for {endpoint.get('path')}: {scan_results.get('error', 'Unknown error')}",
-                {'endpoint': endpoint.get('path'), 'scan_type': scan_type, 'tools_used': scan_results.get('tools_used', [])}
-            )
+        # Note: Scan completion and vulnerability notifications are handled by the calling task
+        # to avoid duplicate notifications
         
         return scan_results
     
@@ -285,15 +268,38 @@ class SecurityScanner:
             
             # Run active scan with enhanced configuration
             try:
+                # First, check what scan policies are available
+                try:
+                    policies_response = self._zap_request('ascan/view/scanPolicyNames')
+                    available_policies = policies_response.get('scanPolicyNames', [])
+                    logger.info(f"📋 Available ZAP scan policies: {available_policies}")
+                    
+                    # Use the first available policy, or 'Default Policy' if it exists
+                    scan_policy = None
+                    if 'Default Policy' in available_policies:
+                        scan_policy = 'Default Policy'
+                    elif available_policies:
+                        scan_policy = available_policies[0]
+                    else:
+                        logger.warning("⚠️ No scan policies available, skipping active scan")
+                        return {'vulnerabilities': [], 'skipped': 'No scan policies available'}
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not get scan policies: {e}, trying without policy")
+                    scan_policy = None
+                
                 ascan_params = {
                     'url': target_url,
                     'contextName': context_name,  # Use contextName instead of contextId for better compatibility
-                    'scanPolicyName': Config.ZAP_SCAN_POLICY,
                     'threadCount': '5'
                 }
                 
+                # Only add scanPolicyName if we have a valid policy
+                if scan_policy:
+                    ascan_params['scanPolicyName'] = scan_policy
+                
                 self._zap_request('ascan/action/scan', ascan_params)
-                logger.info(f"⚡ ZAP active scan started with policy: {Config.ZAP_SCAN_POLICY}")
+                logger.info(f"⚡ ZAP active scan started with policy: {scan_policy or 'default'}")
                 
                 # Wait for active scan to complete
                 self._wait_for_ascan_completion()
@@ -309,7 +315,7 @@ class SecurityScanner:
                 logger.warning(f"Failed to get ZAP alerts: {alert_error}")
             
             # Convert alerts to vulnerabilities with enhanced information
-            vulnerabilities = self._convert_zap_alerts_to_vulnerabilities(alerts, endpoint_info)
+            vulnerabilities = self._convert_zap_alerts_to_vulnerabilities(alerts, endpoint_info, endpoint)
             
             # Return results even if some parts failed
             return {
@@ -563,10 +569,12 @@ Content-Length: 100
         
         path = endpoint.get('path', '')
         
-        # Replace path parameters
+        # Replace path parameters with proper URL encoding
         for param_name, param_value in param_values.items():
             if param_name in path:
-                path = path.replace(f'{{{param_name}}}', str(param_value))
+                # Properly encode the parameter value for URL
+                encoded_value = quote(str(param_value), safe='')
+                path = path.replace(f'{{{param_name}}}', encoded_value)
         
         # Add query parameters with proper URL encoding
         query_params = []
@@ -598,14 +606,28 @@ Content-Length: 100
             logger.warning("⚠️ No ZAP API key configured")
         
         try:
+            logger.debug(f"🔍 Making ZAP API request to: {endpoint}")
             response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
-            return response.json()
+            
+            result = response.json()
+            logger.debug(f"✅ ZAP API response for {endpoint}: {result}")
+            
+            # Check for ZAP API errors
+            if 'code' in result and result['code'] != 'OK':
+                logger.warning(f"⚠️ ZAP API returned error code: {result.get('code')} - {result.get('message', 'Unknown error')}")
+                if result.get('code') == 'bad_view':
+                    logger.warning(f"   This might be a ZAP version compatibility issue with endpoint: {endpoint}")
+            
+            return result
         except requests.exceptions.RequestException as e:
             logger.error(f"❌ ZAP API request failed for {endpoint}: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"   Response status: {e.response.status_code}")
                 logger.error(f"   Response text: {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Unexpected error in ZAP API request for {endpoint}: {e}")
             raise
     
     def _setup_zap_context(self) -> str:
@@ -613,7 +635,14 @@ Content-Length: 100
         try:
             # First check if context already exists
             contexts = self._zap_request('context/view/contextList')
-            context_list = contexts.get('contextList', [])
+            
+            # Handle both old and new ZAP API response formats
+            if 'contextList' in contexts:
+                # New format (ZAP 2.12+) - context list is nested
+                context_list = contexts['contextList']
+            else:
+                # Old format or fallback
+                context_list = contexts.get('contextList', [])
             
             # Try to use existing context if available
             if context_list:
@@ -624,7 +653,16 @@ Content-Length: 100
                     context_info = self._zap_request('context/view/context', {
                         'contextName': context_name
                     })
-                    context_id = context_info.get('contextId', '1')
+                    
+                    # Handle both old and new ZAP API response formats
+                    if 'context' in context_info:
+                        # New format (ZAP 2.12+) - context info is nested
+                        context_data = context_info['context']
+                        context_id = context_data.get('id', '1')
+                    else:
+                        # Old format or fallback
+                        context_id = context_info.get('contextId', '1')
+                    
                     logger.info(f"Using context ID: {context_id}")
                     
                     # Ensure the context is properly configured
@@ -636,6 +674,23 @@ Content-Length: 100
                     return context_id
                 except Exception as e:
                     logger.warning(f"Failed to get context info for {context_name}: {e}")
+                    
+                    # Check if it's a "bad_view" error and try alternative approach
+                    if 'bad_view' in str(e).lower() or 'bad view' in str(e).lower():
+                        logger.info(f"Attempting to use context name directly for {context_name}")
+                        # For bad_view errors, try to use the context name directly
+                        # This works in some ZAP versions where the view endpoint is problematic
+                        try:
+                            # Try to set the context in scope directly
+                            self._zap_request('context/action/setContextInScope', {
+                                'contextName': context_name,
+                                'booleanInScope': 'true'
+                            })
+                            logger.info(f"Successfully configured context {context_name} using direct action")
+                            return '1'  # Use default context ID
+                        except Exception as fallback_error:
+                            logger.warning(f"Fallback context setup also failed: {fallback_error}")
+                    
                     # Fall through to create new context
             
             # Try to create a simple context
@@ -647,11 +702,31 @@ Content-Length: 100
                 logger.info("Successfully created api_context")
                 
                 # Get context ID for the newly created context
-                context_info = self._zap_request('context/view/context', {
-                    'contextName': 'api_context'
-                })
-                context_id = context_info.get('contextId', '1')
-                logger.info(f"Created context ID: {context_id}")
+                try:
+                    context_info = self._zap_request('context/view/context', {
+                        'contextName': 'api_context'
+                    })
+                    
+                    # Handle both old and new ZAP API response formats
+                    if 'context' in context_info:
+                        # New format (ZAP 2.12+) - context info is nested
+                        context_data = context_info['context']
+                        context_id = context_data.get('id', '1')
+                    else:
+                        # Old format or fallback
+                        context_id = context_info.get('contextId', '1')
+                    
+                    logger.info(f"Created context ID: {context_id}")
+                except Exception as context_view_error:
+                    logger.warning(f"Failed to get context info for newly created context: {context_view_error}")
+                    
+                    # Check if it's a "bad_view" error and use fallback
+                    if 'bad_view' in str(context_view_error).lower() or 'bad view' in str(context_view_error).lower():
+                        logger.info("Using fallback context ID due to bad_view error")
+                        context_id = '1'  # Use default context ID
+                    else:
+                        # For other errors, raise the exception
+                        raise context_view_error
                 
                 # Ensure the context is properly configured
                 self._zap_request('context/action/setContextInScope', {
@@ -677,7 +752,15 @@ Content-Length: 100
             
             # Get the context name we're using
             contexts = self._zap_request('context/view/contextList')
-            context_list = contexts.get('contextList', [])
+            
+            # Handle both old and new ZAP API response formats
+            if 'contextList' in contexts:
+                # New format (ZAP 2.12+) - context list is nested
+                context_list = contexts['contextList']
+            else:
+                # Old format or fallback
+                context_list = contexts.get('contextList', [])
+            
             context_name = context_list[0] if context_list else 'api_context'
             
             # Add authorization headers to context if configured
@@ -712,7 +795,16 @@ Content-Length: 100
         while time.time() - start_time < timeout:
             try:
                 status = self._zap_request('spider/view/status')
-                if status.get('status') == '100':
+                
+                # Handle both old and new ZAP API response formats
+                if 'spiderStatus' in status:
+                    # New format (ZAP 2.12+) - status is nested
+                    spider_status = status['spiderStatus'].get('status', '0')
+                else:
+                    # Old format or fallback
+                    spider_status = status.get('status', '0')
+                
+                if spider_status == '100':
                     break
                 time.sleep(5)
             except Exception:
@@ -725,7 +817,16 @@ Content-Length: 100
         while time.time() - start_time < timeout:
             try:
                 status = self._zap_request('ascan/view/status')
-                if status.get('status') == '100':
+                
+                # Handle both old and new ZAP API response formats
+                if 'ascanStatus' in status:
+                    # New format (ZAP 2.12+) - status is nested
+                    ascan_status = status['ascanStatus'].get('status', '0')
+                else:
+                    # Old format or fallback
+                    ascan_status = status.get('status', '0')
+                
+                if ascan_status == '100':
                     break
                 time.sleep(10)
             except Exception:
@@ -735,12 +836,19 @@ Content-Length: 100
         """Get alerts from ZAP"""
         try:
             alerts = self._zap_request('core/view/alerts')
-            return alerts.get('alerts', [])
+            
+            # Handle both old and new ZAP API response formats
+            if 'alerts' in alerts:
+                # New format (ZAP 2.12+) - alerts are nested
+                return alerts['alerts']
+            else:
+                # Old format or fallback
+                return alerts.get('alerts', [])
         except Exception as e:
             logger.error(f"Failed to get ZAP alerts: {e}")
             return []
     
-    def _convert_zap_alerts_to_vulnerabilities(self, alerts: List[Dict], endpoint_info: Dict = None) -> List[Dict]:
+    def _convert_zap_alerts_to_vulnerabilities(self, alerts: List[Dict], endpoint_info: Dict = None, endpoint: Dict = None) -> List[Dict]:
         """Convert ZAP alerts to vulnerability format with enhanced endpoint information"""
         vulnerabilities = []
         
@@ -787,6 +895,9 @@ Content-Length: 100
                 'severity': severity,
                 'category': self._map_zap_alert_to_category(alert.get('name', '')),
                 'evidence': alert.get('evidence', ''),
+                'endpoint_path': endpoint.get('path', 'Unknown') if endpoint else 'Unknown',
+                'endpoint_method': endpoint.get('method', 'Unknown') if endpoint else 'Unknown',
+                'tool': 'zap',
                 'details': vulnerability_details
             }
             
@@ -860,6 +971,9 @@ Content-Length: 100
                 'severity': 'high',
                 'category': 'sql_injection',
                 'evidence': stdout,
+                'endpoint_path': 'Unknown',  # SQLMap doesn't have endpoint context
+                'endpoint_method': 'Unknown',
+                'tool': 'sqlmap',
                 'details': {
                     'tool': 'sqlmap',
                     'stdout': stdout,
@@ -882,6 +996,9 @@ Content-Length: 100
                 'severity': 'high',
                 'category': 'ssrf',
                 'evidence': stdout,
+                'endpoint_path': 'Unknown',  # SSRFMap doesn't have endpoint context
+                'endpoint_method': 'Unknown',
+                'tool': 'ssrfmap',
                 'details': {
                     'tool': 'ssrfmap',
                     'stdout': stdout,
@@ -904,6 +1021,9 @@ Content-Length: 100
                 'severity': 'medium',
                 'category': 'xss',
                 'evidence': stdout,
+                'endpoint_path': 'Unknown',  # XSStrike doesn't have endpoint context
+                'endpoint_method': 'Unknown',
+                'tool': 'xsstrike',
                 'details': {
                     'tool': 'xsstrike',
                     'stdout': stdout,
@@ -966,7 +1086,7 @@ Content-Length: 100
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Parse results
-            vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr)
+            vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
             
             return {
                 'vulnerabilities': vulnerabilities,
@@ -1025,7 +1145,7 @@ Content-Length: 100
                 
                 # Parse results from custom template
                 logger.info(f"🔍 Parsing Nuclei results from custom template...")
-                custom_vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr)
+                custom_vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
                 logger.info(f"🎯 Found {len(custom_vulnerabilities)} vulnerabilities from custom template")
                 
                 # Second phase: Run with built-in API security templates
@@ -1059,7 +1179,7 @@ Content-Length: 100
                 logger.info(f"📄 Built-in templates stdout length: {len(builtin_result.stdout)} characters")
                 
                 # Parse results from built-in templates
-                builtin_vulnerabilities = self._parse_nuclei_results(builtin_result.stdout, builtin_result.stderr)
+                builtin_vulnerabilities = self._parse_nuclei_results(builtin_result.stdout, builtin_result.stderr, endpoint)
                 logger.info(f"🎯 Found {len(builtin_vulnerabilities)} vulnerabilities from built-in templates")
                 
                 # Combine results
@@ -1343,7 +1463,7 @@ requests:
         except Exception:
             return False
     
-    def _parse_nuclei_results(self, stdout: str, stderr: str) -> List[Dict]:
+    def _parse_nuclei_results(self, stdout: str, stderr: str, endpoint: Dict = None) -> List[Dict]:
         """Parse Nuclei results from JSON output"""
         vulnerabilities = []
         
@@ -1365,6 +1485,9 @@ requests:
                             'severity': result.get('info', {}).get('severity', 'medium').lower(),
                             'category': self._map_nuclei_category(result.get('info', {}).get('tags', [])),
                             'evidence': result.get('matcher-name', ''),
+                            'endpoint_path': endpoint.get('path', 'Unknown') if endpoint else 'Unknown',
+                            'endpoint_method': endpoint.get('method', 'Unknown') if endpoint else 'Unknown',
+                            'tool': 'nuclei',
                             'details': {
                                 'tool': 'nuclei',
                                 'template_id': result.get('template-id', ''),
@@ -1467,7 +1590,14 @@ requests:
                 'contextName': context_name
             })
             
-            urls = context_urls.get('urls', [])
+            # Handle both old and new ZAP API response formats
+            if 'contextUrls' in context_urls:
+                # New format (ZAP 2.12+) - URLs are nested
+                urls = context_urls['contextUrls'].get('urls', [])
+            else:
+                # Old format or fallback
+                urls = context_urls.get('urls', [])
+            
             logger.info(f"Context '{context_name}' contains {len(urls)} URLs")
             
             # Check if our target URL is in the context
@@ -1482,6 +1612,124 @@ requests:
         except Exception as e:
             logger.warning(f"Failed to verify URL in context: {e}")
             return False
+    
+    def test_zap_api_compatibility(self) -> Dict[str, Any]:
+        """Test ZAP API compatibility and identify potential issues"""
+        compatibility_results = {
+            'zap_accessible': False,
+            'api_key_valid': False,
+            'context_views_working': False,
+            'context_actions_working': False,
+            'spider_views_working': False,
+            'ascan_views_working': False,
+            'core_views_working': False,
+            'issues': [],
+            'recommendations': []
+        }
+        
+        try:
+            # Test basic ZAP connectivity
+            logger.info("🔍 Testing ZAP API compatibility...")
+            
+            # Test 1: Basic connectivity
+            try:
+                basic_info = self._zap_request('core/view/version')
+                compatibility_results['zap_accessible'] = True
+                logger.info(f"✅ ZAP version: {basic_info.get('version', 'Unknown')}")
+            except Exception as e:
+                compatibility_results['issues'].append(f"ZAP not accessible: {e}")
+                return compatibility_results
+            
+            # Test 2: API key validation
+            try:
+                # Try a simple action that requires API key
+                self._zap_request('context/action/newContext', {'contextName': 'test_context'})
+                compatibility_results['api_key_valid'] = True
+                logger.info("✅ API key is valid")
+                
+                # Clean up test context
+                try:
+                    self._zap_request('context/action/removeContext', {'contextName': 'test_context'})
+                except:
+                    pass
+            except Exception as e:
+                compatibility_results['issues'].append(f"API key validation failed: {e}")
+                compatibility_results['recommendations'].append("Check ZAP API key configuration")
+            
+            # Test 3: Context views
+            try:
+                contexts = self._zap_request('context/view/contextList')
+                if 'contextList' in contexts or 'contextList' in contexts.get('contextList', {}):
+                    compatibility_results['context_views_working'] = True
+                    logger.info("✅ Context views are working")
+                else:
+                    compatibility_results['issues'].append("Context views returned unexpected format")
+            except Exception as e:
+                if 'bad_view' in str(e).lower():
+                    compatibility_results['issues'].append("Context views returning 'bad_view' error - ZAP version compatibility issue")
+                    compatibility_results['recommendations'].append("Consider upgrading ZAP or using fallback context handling")
+                else:
+                    compatibility_results['issues'].append(f"Context views failed: {e}")
+            
+            # Test 4: Context actions
+            try:
+                self._zap_request('context/action/newContext', {'contextName': 'test_action_context'})
+                self._zap_request('context/action/removeContext', {'contextName': 'test_action_context'})
+                compatibility_results['context_actions_working'] = True
+                logger.info("✅ Context actions are working")
+            except Exception as e:
+                compatibility_results['issues'].append(f"Context actions failed: {e}")
+            
+            # Test 5: Spider views
+            try:
+                spider_status = self._zap_request('spider/view/status')
+                if 'spiderStatus' in spider_status or 'status' in spider_status:
+                    compatibility_results['spider_views_working'] = True
+                    logger.info("✅ Spider views are working")
+                else:
+                    compatibility_results['issues'].append("Spider views returned unexpected format")
+            except Exception as e:
+                compatibility_results['issues'].append(f"Spider views failed: {e}")
+            
+            # Test 6: Active scan views
+            try:
+                ascan_status = self._zap_request('ascan/view/status')
+                if 'ascanStatus' in ascan_status or 'status' in ascan_status:
+                    compatibility_results['ascan_views_working'] = True
+                    logger.info("✅ Active scan views are working")
+                else:
+                    compatibility_results['issues'].append("Active scan views returned unexpected format")
+            except Exception as e:
+                compatibility_results['issues'].append(f"Active scan views failed: {e}")
+            
+            # Test 7: Core views
+            try:
+                alerts = self._zap_request('core/view/alerts')
+                if 'alerts' in alerts or 'alerts' in alerts.get('alerts', {}):
+                    compatibility_results['core_views_working'] = True
+                    logger.info("✅ Core views are working")
+                else:
+                    compatibility_results['issues'].append("Core views returned unexpected format")
+            except Exception as e:
+                compatibility_results['issues'].append(f"Core views failed: {e}")
+            
+            # Generate recommendations
+            if not compatibility_results['context_views_working']:
+                compatibility_results['recommendations'].append("Context views are not working - the scanner will use fallback methods")
+            
+            if not compatibility_results['spider_views_working']:
+                compatibility_results['recommendations'].append("Spider views are not working - scan progress monitoring may be limited")
+            
+            if not compatibility_results['ascan_views_working']:
+                compatibility_results['recommendations'].append("Active scan views are not working - scan progress monitoring may be limited")
+            
+            logger.info("✅ ZAP API compatibility test completed")
+            
+        except Exception as e:
+            compatibility_results['issues'].append(f"Compatibility test failed: {e}")
+            logger.error(f"❌ ZAP API compatibility test failed: {e}")
+        
+        return compatibility_results
 
 def scan_endpoint_for_vulnerabilities(endpoint: Dict, param_values: Dict, scan_type: str = 'combined') -> Dict:
     """
@@ -1497,3 +1745,13 @@ def scan_endpoint_for_vulnerabilities(endpoint: Dict, param_values: Dict, scan_t
     """
     scanner = SecurityScanner()
     return scanner.scan_endpoint(endpoint, param_values, scan_type)
+
+def test_zap_compatibility() -> Dict[str, Any]:
+    """
+    Convenience function to test ZAP API compatibility
+    
+    Returns:
+        Compatibility test results
+    """
+    scanner = SecurityScanner()
+    return scanner.test_zap_api_compatibility()

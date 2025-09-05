@@ -1,0 +1,203 @@
+<!-- Scan Details Content -->
+<style>
+.modal-lg {
+    max-width: 90% !important;
+}
+.modal-body {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+.table td {
+    word-wrap: break-word;
+    word-break: break-word;
+    max-width: 0;
+}
+</style>
+<div class="row">
+    <div class="col-md-6">
+        <h6><i class="fas fa-search"></i> Scan Information</h6>
+        <table class="table table-sm">
+            <tr>
+                <td><strong>Scan ID:</strong></td>
+                <td><code class="text-break">{{ scan.id }}</code></td>
+            </tr>
+            <tr>
+                <td><strong>Scan Type:</strong></td>
+                <td><span class="badge bg-info">{{ scan.scan_type }}</span></td>
+            </tr>
+            <tr>
+                <td><strong>Status:</strong></td>
+                <td>
+                    {% if scan.status == 'completed' %}
+                        <span class="badge bg-success">Completed</span>
+                    {% elif scan.status == 'running' %}
+                        <span class="badge bg-warning">Running</span>
+                    {% elif scan.status == 'failed' %}
+                        <span class="badge bg-danger">Failed</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ scan.status }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Scan Time:</strong></td>
+                <td>{{ scan.scan_time.strftime('%Y-%m-%d %H:%M:%S') if scan.scan_time else 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Completed At:</strong></td>
+                <td>{{ scan.completed_at.strftime('%Y-%m-%d %H:%M:%S') if scan.completed_at else 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Duration:</strong></td>
+                <td>{{ scan.duration }}s {% if scan.duration %} ({{ scan.duration }} seconds){% endif %}</td>
+            </tr>
+            <tr>
+                <td><strong>Tools Used:</strong></td>
+                <td>
+                    {% if scan.tools_used %}
+                        {% for tool in scan.tools_used %}
+                            <span class="badge bg-secondary me-1">{{ tool }}</span>
+                        {% endfor %}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div class="col-md-6">
+        <h6><i class="fas fa-server"></i> Target Endpoint</h6>
+        {% if endpoint %}
+        <table class="table table-sm">
+            <tr>
+                <td><strong>Method:</strong></td>
+                <td>
+                    {% if endpoint.method == 'GET' %}
+                        <span class="badge bg-success">GET</span>
+                    {% elif endpoint.method == 'POST' %}
+                        <span class="badge bg-primary">POST</span>
+                    {% elif endpoint.method == 'PUT' %}
+                        <span class="badge bg-warning">PUT</span>
+                    {% elif endpoint.method == 'DELETE' %}
+                        <span class="badge bg-danger">DELETE</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ endpoint.method }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Path:</strong></td>
+                <td><code class="text-break">{{ endpoint.path }}</code></td>
+            </tr>
+            <tr>
+                <td><strong>Service:</strong></td>
+                <td>
+                    {% if service %}
+                        <a href="{{ url_for('dashboard.service_detail', service_id=service.id) }}" class="text-decoration-none">
+                            {{ service.name }}
+                        </a>
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Operation ID:</strong></td>
+                <td class="text-break">{{ endpoint.operation_id or 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td><strong>Summary:</strong></td>
+                <td>{{ endpoint.summary or 'N/A' }}</td>
+            </tr>
+        </table>
+        {% else %}
+        <p class="text-muted">No endpoint information available</p>
+        {% endif %}
+    </div>
+</div>
+
+<hr>
+
+<div class="row">
+    <div class="col-12">
+        <h6><i class="fas fa-shield-alt"></i> Vulnerabilities Found</h6>
+        {% if vulnerabilities %}
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Severity</th>
+                        <th>Category</th>
+                        <th>CVSS</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vuln in vulnerabilities %}
+                    <tr>
+                        <td>
+                            <strong>{{ vuln.name }}</strong>
+                            {% if vuln.description %}
+                                <br><small class="text-muted">{{ vuln.description[:100] }}{% if vuln.description|length > 100 %}...{% endif %}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if vuln.severity == 'critical' %}
+                                <span class="badge bg-danger">CRITICAL</span>
+                            {% elif vuln.severity == 'high' %}
+                                <span class="badge bg-danger">HIGH</span>
+                            {% elif vuln.severity == 'medium' %}
+                                <span class="badge bg-warning">MEDIUM</span>
+                            {% elif vuln.severity == 'low' %}
+                                <span class="badge bg-info">LOW</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ vuln.severity.upper() }}</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-secondary">{{ vuln.category or 'N/A' }}</span></td>
+                        <td>{{ vuln.cvss_score or 'N/A' }}</td>
+                        <td>
+                            <a href="{{ url_for('dashboard.vulnerability_detail', vulnerability_id=vuln.id) }}" 
+                               class="btn btn-sm btn-outline-primary" title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> No vulnerabilities found in this scan.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if scan.scan_config %}
+<div class="row">
+    <div class="col-12">
+        <h6><i class="fas fa-cog"></i> Scan Configuration</h6>
+        <div class="card">
+            <div class="card-body">
+                <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;"><code>{{ scan.scan_config }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if scan.param_values_used %}
+<div class="row">
+    <div class="col-12">
+        <h6><i class="fas fa-list"></i> Parameters Used</h6>
+        <div class="card">
+            <div class="card-body">
+                <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;"><code>{{ scan.param_values_used }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

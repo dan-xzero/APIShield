@@ -193,10 +193,20 @@ class DiscoveryManager:
                 if services_found > 0:
                     try:
                         from app.utils.slack_notifier import slack_notifier
-                        slack_notifier.send_service_discovery_notification(
-                            services_found=services_found,
-                            sources=sources
+                        # Send service discovery notification using the new system
+                        from app.utils.slack_notifier import NotificationData, NotificationType
+                        notification_data = NotificationData(
+                            type=NotificationType.SCAN_STARTED,
+                            title='Service Discovery Completed',
+                            message=f'Service discovery completed: {services_found} services found from {", ".join(sources)}',
+                            severity='info',
+                            data={
+                                'services_found': services_found,
+                                'sources': sources,
+                                'timestamp': datetime.now().isoformat()
+                            }
                         )
+                        slack_notifier.send_notification(notification_data)
                     except Exception as e:
                         logger.warning(f"Failed to send discovery notification: {e}")
                 

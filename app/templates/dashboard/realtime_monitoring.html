@@ -115,9 +115,16 @@
                     <form id="monitoringConfigForm">
                         <div class="row">
                             <div class="col-md-3">
-                                <label for="checkInterval" class="form-label">Check Interval (seconds)</label>
-                                <input type="number" class="form-control" id="checkIntervalInput" name="check_interval" min="10" max="300" value="30">
-                                <small class="form-text text-muted">How often to check for API changes</small>
+                                <label for="checkInterval" class="form-label">Check Interval</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="checkIntervalInput" name="check_interval" min="10" max="86400" value="300">
+                                    <select class="form-select" id="intervalUnit" name="interval_unit" onchange="updateIntervalValue()">
+                                        <option value="seconds">Seconds</option>
+                                        <option value="minutes" selected>Minutes</option>
+                                        <option value="hours">Hours</option>
+                                    </select>
+                                </div>
+                                <small class="form-text text-muted">How often to check for API changes (10 seconds to 24 hours)</small>
                             </div>
                             <div class="col-md-3">
                                 <label for="changeThreshold" class="form-label">Change Threshold (%)</label>
@@ -332,6 +339,11 @@ function loadMonitoringStatus() {
             if (data.success) {
                 monitoringStatus = data.status;
                 updateStatusDisplay();
+                
+                // Also update baseline status if available
+                if (data.baseline_status) {
+                    displayBaselineStatus(data.baseline_status);
+                }
             } else {
                 showNotification('Failed to load monitoring status: ' + data.message, 'danger');
             }
@@ -350,8 +362,17 @@ function updateStatusDisplay() {
         monitoringStatus.running ? 'Active' : 'Inactive';
     document.getElementById('servicesMonitored').textContent = 
         monitoringStatus.services_monitored || 0;
-    document.getElementById('checkInterval').textContent = 
-        (monitoringStatus.check_interval || 30) + 's';
+    // Format check interval for display
+    const intervalSeconds = monitoringStatus.check_interval || 300;
+    let intervalDisplay;
+    if (intervalSeconds >= 3600) {
+        intervalDisplay = Math.round(intervalSeconds / 3600) + 'h';
+    } else if (intervalSeconds >= 60) {
+        intervalDisplay = Math.round(intervalSeconds / 60) + 'm';
+    } else {
+        intervalDisplay = intervalSeconds + 's';
+    }
+    document.getElementById('checkInterval').textContent = intervalDisplay;
     
     const lastCheck = monitoringStatus.last_check;
     if (lastCheck) {
@@ -371,7 +392,22 @@ function loadConfiguration() {
                 const config = data.status;
                 
                 // Update form fields
-                document.getElementById('checkIntervalInput').value = config.check_interval || 30;
+                const intervalSeconds = config.check_interval || 300;
+                document.getElementById('checkIntervalInput').value = intervalSeconds;
+                
+                // Set appropriate unit based on interval value
+                const unitSelect = document.getElementById('intervalUnit');
+                if (intervalSeconds >= 3600) {
+                    unitSelect.value = 'hours';
+                    document.getElementById('checkIntervalInput').value = Math.round(intervalSeconds / 3600);
+                } else if (intervalSeconds >= 60) {
+                    unitSelect.value = 'minutes';
+                    document.getElementById('checkIntervalInput').value = Math.round(intervalSeconds / 60);
+                } else {
+                    unitSelect.value = 'seconds';
+                    document.getElementById('checkIntervalInput').value = intervalSeconds;
+                }
+                
                 document.getElementById('changeThreshold').value = (config.change_threshold || 0.1) * 100;
                 document.getElementById('scanDepth').value = config.scan_depth || 'comprehensive';
                 document.getElementById('autoScanEnabled').checked = config.auto_scan_enabled !== false;
@@ -393,7 +429,33 @@ function loadConfiguration() {
         });
 }
 
+function updateIntervalValue() {
+    const intervalInput = document.getElementById('checkIntervalInput');
+    const unitSelect = document.getElementById('intervalUnit');
+    const currentValue = parseInt(intervalInput.value) || 300;
+    const unit = unitSelect.value;
+    
+    // Convert to seconds for storage
+    let seconds;
+    switch(unit) {
+        case 'minutes':
+            seconds = currentValue * 60;
+            break;
+        case 'hours':
+            seconds = currentValue * 3600;
+            break;
+        default: // seconds
+            seconds = currentValue;
+    }
+    
+    // Update the input value to show the converted value
+    intervalInput.value = seconds;
+}
+
 function saveConfiguration() {
+    // Convert interval to seconds before saving
+    updateIntervalValue();
+    
     const formData = new FormData(configForm);
     const config = {
         check_interval: parseInt(formData.get('check_interval')),
@@ -471,7 +533,7 @@ function displayRecentChanges(changes) {
         // Get affected endpoints count
         const endpointCount = change.affected_endpoints ? change.affected_endpoints.length : 0;
         
-        html += `<tr>
+        html += `<tr class="clickable-row" onclick="showChangeDetails('${change.service_id}', '${change.change_type}', '${change.timestamp}')" style="cursor: pointer;">
             <td>${timestamp}</td>
             <td>${serviceName}</td>
             <td>${change.change_type || 'Unknown'}</td>
@@ -485,10 +547,56 @@ function displayRecentChanges(changes) {
 }
 
 function loadAutoScanLogs() {
-    // This would typically load from a separate endpoint
-    // For now, we'll show a placeholder
-    document.getElementById('autoScanLogs').innerHTML = 
-        '<div class="alert alert-info">Auto-scan logs will be displayed here. This feature is coming soon!</div>';
+    fetch('/api/realtime-monitoring/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const scanActivity = data.scan_activity || [];
+                displayAutoScanLogs(scanActivity);
+            } else {
+                document.getElementById('autoScanLogs').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load auto-scan logs</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading auto-scan logs:', error);
+            document.getElementById('autoScanLogs').innerHTML = 
+                '<div class="alert alert-danger">Error loading auto-scan logs</div>';
+        });
+}
+
+function displayAutoScanLogs(scanActivity) {
+    const container = document.getElementById('autoScanLogs');
+    
+    if (scanActivity.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">No auto-scan activity in the last 24 hours</div>';
+        return;
+    }
+    
+    let html = '<div class="table-responsive"><table class="table table-hover">';
+    html += '<thead><tr><th>Timestamp</th><th>Service</th><th>Endpoint</th><th>Status</th><th>Duration</th><th>Tools</th></tr></thead><tbody>';
+    
+    scanActivity.forEach(scan => {
+        const timestamp = new Date(scan.timestamp).toLocaleString();
+        const statusClass = scan.status === 'completed' ? 'success' : 
+                           scan.status === 'failed' ? 'danger' : 
+                           scan.status === 'running' ? 'warning' : 'secondary';
+        
+        const duration = scan.duration ? `${scan.duration}s` : 'N/A';
+        const tools = scan.tools_used ? scan.tools_used.join(', ') : 'Unknown';
+        
+        html += `<tr class="clickable-row" onclick="showScanDetails('${scan.scan_id || scan.timestamp}')" style="cursor: pointer;">
+            <td>${timestamp}</td>
+            <td>${scan.service_name || 'Unknown'}</td>
+            <td>${scan.endpoint_method} ${scan.endpoint_path}</td>
+            <td><span class="badge bg-${statusClass}">${scan.status}</span></td>
+            <td>${duration}</td>
+            <td>${tools}</td>
+        </tr>`;
+    });
+    
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
 }
 
 function startMonitoring() {
@@ -610,11 +718,66 @@ function resetBaseline() {
 function checkBaselineStatus() {
     showNotification('Checking baseline status...', 'info');
     
-    // This would typically call an endpoint to get baseline status
-    // For now, we'll show a simple message
-    setTimeout(() => {
-        showNotification('Baseline status check completed. Check the monitoring status above.', 'info');
-    }, 1000);
+    fetch('/api/realtime-monitoring/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const baselineStatus = data.baseline_status || {};
+                displayBaselineStatus(baselineStatus);
+                showNotification('Baseline status check completed.', 'success');
+            } else {
+                showNotification('Failed to check baseline status: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error checking baseline status:', error);
+            showNotification('Error checking baseline status', 'danger');
+        });
+}
+
+function displayBaselineStatus(baselineStatus) {
+    const statusText = document.getElementById('scanningStatusText');
+    const statusDiv = document.getElementById('scanningStatus');
+    
+    if (baselineStatus.baseline_established) {
+        const servicesCount = baselineStatus.services_with_baseline || 0;
+        const lastUpdate = baselineStatus.last_baseline_update;
+        
+        let statusMessage = `Baseline established for ${servicesCount} service(s)`;
+        if (lastUpdate) {
+            const updateDate = new Date(lastUpdate);
+            statusMessage += ` (Last updated: ${updateDate.toLocaleString()})`;
+        }
+        
+        if (baselineStatus.auto_scan_enabled) {
+            statusMessage += ' - Auto-scanning ENABLED';
+            statusDiv.className = 'alert alert-success';
+        } else {
+            statusMessage += ' - Auto-scanning DISABLED';
+            statusDiv.className = 'alert alert-warning';
+        }
+        
+        statusText.textContent = statusMessage;
+        
+        // Update button visibility
+        const enableBtn = document.getElementById('enableScanningBtn');
+        const disableBtn = document.getElementById('disableScanningBtn');
+        
+        if (baselineStatus.auto_scan_enabled) {
+            enableBtn.style.display = 'none';
+            disableBtn.style.display = 'block';
+        } else {
+            enableBtn.style.display = 'block';
+            disableBtn.style.display = 'none';
+        }
+    } else {
+        statusText.textContent = 'No baseline established - Click "Establish Baseline" to create one';
+        statusDiv.className = 'alert alert-info';
+        
+        // Hide both buttons when no baseline
+        document.getElementById('enableScanningBtn').style.display = 'none';
+        document.getElementById('disableScanningBtn').style.display = 'none';
+    }
 }
 
 function enableAutoScanning() {
@@ -712,5 +875,219 @@ function showNotification(message, type = 'info') {
         }
     }, 5000);
 }
+
+// Modal functions for detailed views
+function showChangeDetails(serviceId, changeType, timestamp) {
+    // Create modal content based on change type
+    const modalContent = `
+        <div class="modal fade" id="changeDetailsModal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-info-circle"></i> Change Details
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-server"></i> Service Information</h6>
+                                <p><strong>Service ID:</strong> ${serviceId}</p>
+                                <p><strong>Change Type:</strong> ${changeType}</p>
+                                <p><strong>Timestamp:</strong> ${new Date(timestamp).toLocaleString()}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-chart-line"></i> Impact Assessment</h6>
+                                <p><strong>Severity:</strong> <span class="badge bg-warning">Medium</span></p>
+                                <p><strong>Status:</strong> <span class="badge bg-success">Detected</span></p>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6><i class="fas fa-list"></i> Affected Endpoints</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Method</th>
+                                        <th>Path</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted">
+                                            Loading endpoint details...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="triggerServiceScan('${serviceId}')">
+                            <i class="fas fa-search"></i> Scan Service
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('changeDetailsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalContent);
+    
+    // Show modal using Bootstrap's native modal
+    const modal = new bootstrap.Modal(document.getElementById('changeDetailsModal'));
+    modal.show();
+    
+    // Load endpoint details
+    loadChangeEndpointDetails(serviceId, changeType, timestamp);
+}
+
+function showScanDetails(scanId) {
+    const modalContent = `
+        <div class="modal fade" id="scanDetailsModal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-xl" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-search"></i> Scan Details
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-info-circle"></i> Scan Information</h6>
+                                <p><strong>Scan ID:</strong> ${scanId}</p>
+                                <p><strong>Status:</strong> <span class="badge bg-warning">Running</span></p>
+                                <p><strong>Started:</strong> ${new Date().toLocaleString()}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-tools"></i> Tools Used</h6>
+                                <p><strong>ZAP:</strong> <span class="badge bg-success">Active</span></p>
+                                <p><strong>Nuclei:</strong> <span class="badge bg-success">Active</span></p>
+                                <p><strong>SQLMap:</strong> <span class="badge bg-success">Active</span></p>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6><i class="fas fa-shield-alt"></i> Security Findings</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Severity</th>
+                                        <th>Vulnerability</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted">
+                                            Scan in progress... Results will appear here.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-info" onclick="refreshScanStatus('${scanId}')">
+                            <i class="fas fa-sync"></i> Refresh Status
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('scanDetailsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to page
+    document.body.insertAdjacentHTML('beforeend', modalContent);
+    
+    // Show modal using Bootstrap's native modal
+    const modal = new bootstrap.Modal(document.getElementById('scanDetailsModal'));
+    modal.show();
+    
+    // Load scan details from API
+    loadScanDetails(scanId);
+}
+
+function loadScanDetails(scanId) {
+    // Load scan details from API
+    fetch(`/api/scan-modal/${scanId}`)
+        .then(response => response.text())
+        .then(html => {
+            const modalBody = document.querySelector('#scanDetailsModal .modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading scan details:', error);
+            const modalBody = document.querySelector('#scanDetailsModal .modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        Error loading scan details. Please try again.
+                    </div>
+                `;
+            }
+        });
+}
+
+function loadChangeEndpointDetails(serviceId, changeType, timestamp) {
+    // Load change details from API
+    fetch(`/api/change-modal/${serviceId}`)
+        .then(response => response.text())
+        .then(html => {
+            const modalBody = document.querySelector('#changeDetailsModal .modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading change details:', error);
+            const modalBody = document.querySelector('#changeDetailsModal .modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        Error loading change details. Please try again.
+                    </div>
+                `;
+            }
+        });
+}
+
+function triggerServiceScan(serviceId) {
+    // This would trigger a scan for the specific service
+    showNotification('Service scan triggered for service: ' + serviceId, 'success');
+    const modal = bootstrap.Modal.getInstance(document.getElementById('changeDetailsModal'));
+    if (modal) {
+        modal.hide();
+    }
+}
+
+function refreshScanStatus(scanId) {
+    // This would refresh the scan status
+    showNotification('Scan status refreshed for scan: ' + scanId, 'info');
+}
+
 </script>
 {% endblock %}

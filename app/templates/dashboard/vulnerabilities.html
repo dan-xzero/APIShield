@@ -191,7 +191,7 @@
                                 </thead>
                                 <tbody>
                                     {% for vulnerability in vulnerabilities.items %}
-                                    <tr>
+                                    <tr class="clickable-row" onclick="showVulnerabilityDetails('{{ vulnerability.id }}')" style="cursor: pointer;">
                                         <td>
                                             <strong>{{ vulnerability.name }}</strong>
                                             {% if vulnerability.description %}
@@ -413,5 +413,163 @@ document.addEventListener('DOMContentLoaded', function() {
     categoryFilter.addEventListener('change', applyFilters);
     statusFilter.addEventListener('change', applyFilters);
         });
+    </script>
+
+    <!-- Vulnerability Details Modal -->
+    <script>
+    function showVulnerabilityDetails(vulnerabilityId) {
+        // Create modal content
+        const modalContent = `
+            <div class="modal fade" id="vulnerabilityDetailsModal" tabindex="-1" role="dialog">
+                <div class="modal-dialog modal-xl" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-shield-alt"></i> Vulnerability Details
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="fas fa-info-circle"></i> Vulnerability Information</h6>
+                                    <p><strong>ID:</strong> ${vulnerabilityId}</p>
+                                    <p><strong>Name:</strong> <span id="vulnName">Loading...</span></p>
+                                    <p><strong>Severity:</strong> <span id="vulnSeverity" class="badge bg-warning">Loading...</span></p>
+                                    <p><strong>Category:</strong> <span id="vulnCategory">Loading...</span></p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="fas fa-chart-line"></i> Risk Assessment</h6>
+                                    <p><strong>CVSS Score:</strong> <span id="vulnCvss" class="badge bg-info">Loading...</span></p>
+                                    <p><strong>Status:</strong> <span id="vulnStatus" class="badge bg-warning">Loading...</span></p>
+                                    <p><strong>Discovered:</strong> <span id="vulnDiscovered">Loading...</span></p>
+                                </div>
+                            </div>
+                            <hr>
+                            <h6><i class="fas fa-file-alt"></i> Description</h6>
+                            <div id="vulnDescription" class="alert alert-light">
+                                Loading vulnerability description...
+                            </div>
+                            <hr>
+                            <h6><i class="fas fa-map-marker-alt"></i> Affected Endpoint</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Service</th>
+                                            <th>Method</th>
+                                            <th>Path</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vulnEndpointDetails">
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted">
+                                                Loading endpoint details...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <hr>
+                            <h6><i class="fas fa-tools"></i> Remediation</h6>
+                            <div id="vulnRemediation" class="alert alert-info">
+                                <i class="fas fa-lightbulb"></i> Loading remediation guidance...
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-warning" onclick="markFalsePositive('${vulnerabilityId}')">
+                                <i class="fas fa-times"></i> Mark False Positive
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="markRemediated('${vulnerabilityId}')">
+                                <i class="fas fa-check"></i> Mark Remediated
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="viewFullReport('${vulnerabilityId}')">
+                                <i class="fas fa-file-pdf"></i> Full Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('vulnerabilityDetailsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalContent);
+        
+        // Show modal using Bootstrap's native modal
+        const modal = new bootstrap.Modal(document.getElementById('vulnerabilityDetailsModal'));
+        modal.show();
+        
+        // Load vulnerability details
+        loadVulnerabilityDetails(vulnerabilityId);
+    }
+
+    function loadVulnerabilityDetails(vulnerabilityId) {
+        // Load vulnerability details from API
+        fetch(`/api/vulnerability-modal/${vulnerabilityId}`)
+            .then(response => response.text())
+            .then(html => {
+                const modalBody = document.querySelector('#vulnerabilityDetailsModal .modal-body');
+                if (modalBody) {
+                    modalBody.innerHTML = html;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading vulnerability details:', error);
+                const modalBody = document.querySelector('#vulnerabilityDetailsModal .modal-body');
+                if (modalBody) {
+                    modalBody.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            Error loading vulnerability details. Please try again.
+                        </div>
+                    `;
+                }
+            });
+    }
+
+    function viewFullReport(vulnerabilityId) {
+        // This would generate and download a full vulnerability report
+        showNotification('Generating full report for vulnerability: ' + vulnerabilityId, 'info');
+    }
+
+    function scanEndpoint(endpointId) {
+        // This would trigger a re-scan of the specific endpoint
+        showNotification('Re-scanning endpoint: ' + endpointId, 'success');
+        const modal = bootstrap.Modal.getInstance(document.getElementById('vulnerabilityDetailsModal'));
+        if (modal) {
+            modal.hide();
+        }
+    }
+
+    function showNotification(message, type) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert">
+                <span>&times;</span>
+            </button>
+        `;
+        
+        // Add to page
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
     </script>
 {% endblock %}
