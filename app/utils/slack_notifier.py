@@ -184,7 +184,7 @@ class SlackNotifier:
                 title = f"🚀 {scan_type.title()} Scan Started - Service"
                 message = f"Starting comprehensive security scan for service: **{service_name}**"
                 scan_scope = f"Scanning {endpoint_count} endpoints in service"
-        else:
+            else:
                 title = f"🚀 {scan_type.title()} Scan Started - Endpoint"
                 message = f"Starting security scan for endpoint: **{endpoint_method} {endpoint_path}**"
                 scan_scope = f"Single endpoint scan"
