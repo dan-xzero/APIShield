@@ -1,0 +1,62 @@
+id: security-headers-universal
+info:
+  name: Security Headers - Universal
+  author: APIShield
+  severity: low
+  description: Tests for missing security headers in API responses
+  tags: api,security-headers,misconfiguration,security
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Clickjacking
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-Frame-Options"
+          - "X-Content-Type-Options"
+          - "X-XSS-Protection"
+          - "Strict-Transport-Security"
+          - "Content-Security-Policy"
+        condition: and
+        part: header
+        negative: true
+      - type: word
+        words:
+          - "X-Frame-Options: DENY"
+          - "X-Frame-Options: SAMEORIGIN"
+        condition: and
+        part: header
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "test": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-Content-Type-Options: nosniff"
+        condition: and
+        part: header
+        negative: true
+      - type: word
+        words:
+          - "X-XSS-Protection: 1; mode=block"
+        condition: and
+        part: header
+        negative: true

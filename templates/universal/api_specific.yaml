@@ -1,0 +1,80 @@
+id: api-specific-universal
+info:
+  name: API Specific - Universal
+  author: APIShield
+  severity: medium
+  description: Tests for API-specific vulnerabilities and misconfigurations
+  tags: api,api-security,rest,graphql,soap
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/API_Security
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "swagger"
+          - "openapi"
+          - "api-docs"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "version"
+          - "info"
+          - "paths"
+        condition: and
+        part: body
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "query": "query { __schema { types { name } } }"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "__schema"
+          - "types"
+          - "fields"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "graphql"
+          - "introspection"
+        condition: and
+        part: body
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "cors"
+          - "cross-origin"
+        condition: and
+        part: header
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+        condition: and
+        part: header

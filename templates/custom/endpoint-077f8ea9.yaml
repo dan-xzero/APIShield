@@ -1,0 +1,48 @@
+id: endpoint-077f8ea9
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/boxzooka/cancelled-orders
+  name: Endpoint Scan - POST /warehouse-orders/boxzooka/cancelled-orders
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"order_id": "W123456789", "reason": "Item out of stock",
+    "comments": "Customer changed their mind", "cancelled_by": "api-testing-tool",
+    "timestamp": "2022-09-15T08:30:00Z"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/boxzooka/cancelled-orders'

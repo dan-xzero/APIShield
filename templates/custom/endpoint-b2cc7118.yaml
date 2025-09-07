@@ -1,0 +1,48 @@
+id: endpoint-b2cc7118
+info:
+  author: APIShield
+  description: Security scan for PUT /v1/boxes/{boxId}
+  name: Endpoint Scan - PUT /v1/boxes/{boxId}
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"boxId": 12345, "request_body": {"name": "Updated Box", "description": "This
+    is an updated box", "color": "blue", "size": "medium", "weight": 2.5, "isLocked":
+    true, "securityCode": "P@ssw0rd123!"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/v1/boxes/{boxId}'

@@ -86,6 +86,21 @@ class Config:
     NUCLEI_SEVERITY = os.getenv('NUCLEI_SEVERITY', 'low,medium,high,critical')
     NUCLEI_RATE_LIMIT = int(os.getenv('NUCLEI_RATE_LIMIT', 150))
     
+    # Enhanced Template System Configuration
+    TEMPLATES_DIR = os.getenv('TEMPLATES_DIR', './templates')
+    ENABLE_UNIVERSAL_TEMPLATES = os.getenv('ENABLE_UNIVERSAL_TEMPLATES', 'True').lower() == 'true'
+    TEMPLATE_CACHE_TTL = int(os.getenv('TEMPLATE_CACHE_TTL', 300))  # 5 minutes
+    MAX_TEMPLATE_SIZE = int(os.getenv('MAX_TEMPLATE_SIZE', 1024 * 1024))  # 1MB
+    
+    # Enhanced Scanning Configuration
+    ENABLE_BUSINESS_LOGIC_TESTING = os.getenv('ENABLE_BUSINESS_LOGIC_TESTING', 'True').lower() == 'true'
+    ENABLE_API_SPECIFIC_TESTS = os.getenv('ENABLE_API_SPECIFIC_TESTS', 'True').lower() == 'true'
+    ENABLE_ADVANCED_PARAMETER_TESTING = os.getenv('ENABLE_ADVANCED_PARAMETER_TESTING', 'True').lower() == 'true'
+    TEST_INTENSITY = os.getenv('TEST_INTENSITY', 'standard')  # light, standard, aggressive, comprehensive
+    BUSINESS_LOGIC_TEST_DEPTH = os.getenv('BUSINESS_LOGIC_TEST_DEPTH', 'medium')  # basic, medium, advanced
+    CUSTOM_TEMPLATES_DIR = os.getenv('CUSTOM_TEMPLATES_DIR', './templates/custom')
+    COMMUNITY_TEMPLATES_DIR = os.getenv('COMMUNITY_TEMPLATES_DIR', './templates/community')
+    
     ZAP_SPIDER_DEPTH = int(os.getenv('ZAP_SPIDER_DEPTH', 3))
     ZAP_MAX_CHILDREN = int(os.getenv('ZAP_MAX_CHILDREN', 10))
     ZAP_SCAN_POLICY = os.getenv('ZAP_SCAN_POLICY', 'default')

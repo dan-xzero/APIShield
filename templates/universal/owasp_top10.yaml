@@ -1,0 +1,87 @@
+id: owasp-top10-universal
+info:
+  name: OWASP API Security Top 10 - Universal
+  author: APIShield
+  severity: high
+  description: Tests for OWASP API Security Top 10 vulnerabilities
+  tags: api,owasp,top10,security
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-project-top-ten/
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "broken object level authorization"
+          - "broken authentication"
+          - "excessive data exposure"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "mass assignment": true,
+        "admin": true,
+        "role": "admin"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "created"
+          - "updated"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "rate limiting": false,
+        "throttling": false,
+        "quota": false
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "updated"
+          - "modified"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and

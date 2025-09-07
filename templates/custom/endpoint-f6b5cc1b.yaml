@@ -1,0 +1,48 @@
+id: endpoint-f6b5cc1b
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/shipment-update
+  name: Endpoint Scan - POST /warehouse-orders/shipment-update
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"order_id": "WO123456", "shipment_id": "SH6789", "status":
+    "Shipped", "tracking_number": "1Z12345", "estimated_delivery_date": "2022-09-30",
+    "updated_by": "warehouse_manager@example.com", "security_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/shipment-update'

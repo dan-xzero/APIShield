@@ -1,0 +1,92 @@
+id: auth-bypass-universal
+info:
+  name: Authentication Bypass - Universal
+  author: APIShield
+  severity: high
+  description: Tests for authentication bypass vulnerabilities in APIs
+  tags: api,authentication,auth-bypass,security
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Authentication_Bypass
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "access denied"
+          - "authentication required"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 401
+          - 403
+        condition: and
+      - type: word
+        words:
+          - "token"
+          - "jwt"
+          - "bearer"
+          - "session"
+        condition: and
+        part: header
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "username": "admin",
+        "password": "admin"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "authenticated"
+          - "token"
+          - "jwt"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Authorization: "Bearer invalid-token"
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "invalid"
+          - "expired"
+          - "malformed"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and

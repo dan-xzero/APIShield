@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 from app import db
 from app.models import Service, ApiVersion, Endpoint
 from app.config import Config
+from app.utils.definition_comparator import APIDefinitionComparator
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class APIPortalCrawler:
         self.portal_url = portal_url or Config.API_PORTAL_URL
         self.api_base = api_base or Config.API_BASE_URL
         self.session = requests.Session()
+        self.definition_comparator = APIDefinitionComparator()
         
         # Set headers to bypass ngrok warning page
         self.session.headers.update({
@@ -261,31 +263,19 @@ class APIPortalCrawler:
                     spec = self.fetch_api_definition(service.name, service.api_url, service_info.get('service_id'))
                     
                     if spec:
-                        # Check if this is a new version
-                        version_number = spec.get('info', {}).get('version', '1.0.0')
-                        existing_version = ApiVersion.query.filter_by(
-                            service_id=service.id,
-                            version_number=version_number
-                        ).first()
+                        # Use definition comparator to check for changes and trigger scans
+                        comparison_results = self.definition_comparator.update_service_with_comparison(service.id, spec)
                         
-                        if not existing_version:
-                            # Create new API version
-                            api_version = ApiVersion(
-                                service_id=service.id,
-                                version_number=version_number,
-                                spec_json=spec
-                            )
-                            db.session.add(api_version)
-                            db.session.flush()
+                        if comparison_results['changes_detected']:
+                            logger.info(f"Changes detected for {service.name}: {comparison_results['comparison_result']['change_types']}")
                             stats['api_versions_added'] += 1
+                            stats['endpoints_added'] += comparison_results.get('endpoints_added', 0)
                             
-                            # Extract and store endpoints
-                            endpoints_added = self._extract_endpoints(api_version, spec)
-                            stats['endpoints_added'] += endpoints_added
-                            
-                            logger.info(f"Added {endpoints_added} endpoints for {service.name}")
+                            # Log scan triggers
+                            if comparison_results['scans_triggered'] > 0:
+                                logger.info(f"Triggered {comparison_results['scans_triggered']} scans for {service.name}")
                         else:
-                            logger.info(f"API version {version_number} already exists for {service.name}")
+                            logger.info(f"No changes detected for {service.name}")
                         
                         # Update service status and last checked
                         service.status = 'active'

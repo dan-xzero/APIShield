@@ -1,0 +1,49 @@
+id: endpoint-3b75b15b
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/kerry/shipment-update
+  name: Endpoint Scan - POST /warehouse-orders/kerry/shipment-update
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"orderNumber": "WO123456789", "shipmentStatus": "Shipped",
+    "trackingNumber": "123456789", "estimatedDeliveryDate": "2022-12-31", "items":
+    [{"itemName": "Product A", "quantity": 2}, {"itemName": "Product B", "quantity":
+    1}]}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/kerry/shipment-update'

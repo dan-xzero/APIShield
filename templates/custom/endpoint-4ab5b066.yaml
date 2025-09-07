@@ -1,0 +1,48 @@
+id: endpoint-4ab5b066
+info:
+  author: APIShield
+  description: Security scan for PUT /warehouse-orders/{warehouseOrderId}/manual-dispatch
+  name: Endpoint Scan - PUT /warehouse-orders/{warehouseOrderId}/manual-dispatch
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"warehouseOrderId": 12345, "request_body": {"trackingNumber": "TRK123456789",
+    "carrier": "UPS", "estimatedDeliveryDate": "2022-10-31", "status": "Dispatched",
+    "securityToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbWVzIEQoeWJlciIsImlhdCI6MTYxMjM2MjMxM30.rHmP7p2sTp6jIcT8zRqDz4Y1cjX8Sx"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/warehouse-orders/{warehouseOrderId}/manual-dispatch'

@@ -50,9 +50,12 @@ class SlackNotifier:
         self._cache_ttl = 300  # 5 minutes TTL for deduplication
         
         if not self.enabled:
-            logger.warning("⚠️  Slack notifications disabled - SLACK_WEBHOOK_URL not configured")
+            # Silently disable Slack notifications without logging
+            pass
         else:
-            logger.info("✅ Slack notifications enabled")
+            # Only log if explicitly enabled via environment variable
+            if os.getenv('SLACK_VERBOSE_LOGGING', 'false').lower() == 'true':
+                logger.info("✅ Slack notifications enabled")
     
     def _generate_vulnerability_hash(self, vulnerability: Dict) -> str:
         """Generate a hash for vulnerability deduplication"""

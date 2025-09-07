@@ -1,0 +1,46 @@
+id: endpoint-73b504be
+info:
+  author: APIShield
+  description: Security scan for PUT /warehouse-orders/{warehouseOrderId}/dispatch
+  name: Endpoint Scan - PUT /warehouse-orders/{warehouseOrderId}/dispatch
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"warehouseOrderId": 12345}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/warehouse-orders/{warehouseOrderId}/dispatch'

@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, quote
 from app.config import Config
 from app.utils.slack_notifier import slack_notifier
+from app.utils.template_manager import APIShieldTemplateManager
+from app.utils.business_logic_tester import BusinessLogicTester
+from app.utils.jwt_security_tester import JWTSecurityTester
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,13 @@ class SecurityScanner:
         self.ssrfmap_path = Config.SSRFMAP_PATH
         self.xsstrike_path = Config.XSSTRIKE_PATH
         self.nuclei_path = Config.NUCLEI_PATH
+        
+        # Template manager
+        self.template_manager = APIShieldTemplateManager()
+        
+        # Enhanced testing modules
+        self.business_logic_tester = BusinessLogicTester()
+        self.jwt_security_tester = JWTSecurityTester()
         
         # Setup authorization headers
         self._setup_authorization_headers()
@@ -155,6 +165,29 @@ class SecurityScanner:
                     logger.warning(f"Nuclei scan failed: {e}")
                     scan_results['tools_used'].append('nuclei(failed)')
             
+            # Enhanced testing modules
+            if scan_type in ['enhanced', 'combined'] and Config.ENABLE_BUSINESS_LOGIC_TESTING:
+                try:
+                    business_logic_results = self.business_logic_tester.test_business_logic_vulnerabilities(
+                        endpoint, param_values, self.get_auth_headers()
+                    )
+                    scan_results['vulnerabilities'].extend(business_logic_results.get('vulnerabilities', []))
+                    scan_results['tools_used'].append('business_logic_tester')
+                except Exception as e:
+                    logger.warning(f"Business logic testing failed: {e}")
+                    scan_results['tools_used'].append('business_logic_tester(failed)')
+            
+            if scan_type in ['enhanced', 'combined'] and Config.ENABLE_BUSINESS_LOGIC_TESTING:
+                try:
+                    jwt_results = self.jwt_security_tester.test_jwt_vulnerabilities(
+                        endpoint, param_values, self.get_auth_headers()
+                    )
+                    scan_results['vulnerabilities'].extend(jwt_results.get('vulnerabilities', []))
+                    scan_results['tools_used'].append('jwt_security_tester')
+                except Exception as e:
+                    logger.warning(f"JWT security testing failed: {e}")
+                    scan_results['tools_used'].append('jwt_security_tester(failed)')
+            
             scan_results['duration'] = time.time() - start_time
             
             # Check if any tools succeeded
@@ -185,7 +218,7 @@ class SecurityScanner:
         return scan_results
     
     def _run_zap_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
-        """Run OWASP ZAP scan with enhanced curl-based information gathering"""
+        """Run enhanced OWASP ZAP scan with max coverage playbook features"""
         try:
             # Check if ZAP is available
             if not self._check_zap_availability():
@@ -194,7 +227,7 @@ class SecurityScanner:
             
             # Build target URL
             target_url = self._build_target_url(endpoint, param_values)
-            logger.info(f"🔍 Starting ZAP scan for: {target_url}")
+            logger.info(f"🔍 Starting enhanced ZAP scan for: {target_url}")
             
             # Get authorization headers
             auth_headers = self.get_auth_headers()
@@ -203,131 +236,39 @@ class SecurityScanner:
             endpoint_info = self._gather_endpoint_information_with_curl(target_url, auth_headers, endpoint, param_values)
             logger.info(f"📊 Endpoint information gathered: {endpoint_info.get('status_code', 'Unknown')} status, {len(endpoint_info.get('headers', {}))} headers")
             
-            # Configure ZAP context with authorization headers
-            context_id = self._setup_zap_context_with_headers(auth_headers)
+            # Setup enhanced ZAP configuration
+            context_name = self._setup_enhanced_zap_context(target_url, auth_headers)
             
-            # Get the context name we're using
-            contexts = self._zap_request('context/view/contextList')
-            context_list = contexts.get('contextList', [])
-            context_name = context_list[0] if context_list else 'api_context'
+            # Configure ZAP for maximum coverage
+            self._configure_zap_max_coverage()
             
-            # Add target URL to ZAP context
-            try:
-                # Add the specific target URL to context
-                self._zap_request('context/action/includeInContext', {
-                    'contextName': context_name,
-                    'regex': f'.*{target_url.split("/")[2]}.*'  # Extract domain from URL
-                })
-                
-                # Also add the specific URL pattern
-                self._zap_request('context/action/includeInContext', {
-                    'contextName': context_name,
-                    'regex': f'.*{target_url.replace("https://", "").replace("http://", "")}.*'
-                })
-                
-                # Add the exact URL to context
-                self._zap_request('context/action/includeInContext', {
-                    'contextName': context_name,
-                    'regex': f'.*{target_url}.*'
-                })
-                
-                # Wait a moment for context to update
-                time.sleep(2)
-                
-                # Verify URL is in context
-                if not self._verify_url_in_context(context_name, target_url):
-                    logger.warning("⚠️ Target URL not in context, attempting to add again...")
-                    # Try one more time with a broader pattern
-                    self._zap_request('context/action/includeInContext', {
-                        'contextName': context_name,
-                        'regex': '.*'  # Include everything temporarily
-                    })
-                    time.sleep(1)
-                
-                logger.info(f"✅ Added target URL to ZAP context: {target_url}")
-            except Exception as context_error:
-                logger.warning(f"Failed to add URL to context: {context_error}")
+            # Add target URL to ZAP context with enhanced patterns
+            self._add_target_to_zap_context(context_name, target_url)
             
-            # Add target to ZAP spider with enhanced configuration
-            try:
-                spider_params = {
-                    'url': target_url,
-                    'contextName': context_name,  # Use contextName for consistency
-                    'maxDepth': str(Config.ZAP_SPIDER_DEPTH),
-                    'maxChildren': str(Config.ZAP_MAX_CHILDREN),
-                    'threadCount': '5'
-                }
-                
-                self._zap_request('spider/action/scan', spider_params)
-                logger.info(f"🕷️ ZAP spider started with depth {Config.ZAP_SPIDER_DEPTH}, max children {Config.ZAP_MAX_CHILDREN}")
-                
-                # Wait for spider to complete
-                self._wait_for_spider_completion()
-            except Exception as spider_error:
-                logger.warning(f"Spider scan failed, continuing with active scan: {spider_error}")
+            # Run enhanced spider scan
+            self._run_enhanced_spider_scan(target_url, context_name)
             
-            # Run active scan with enhanced configuration
-            try:
-                # First, check what scan policies are available
-                try:
-                    policies_response = self._zap_request('ascan/view/scanPolicyNames')
-                    available_policies = policies_response.get('scanPolicyNames', [])
-                    logger.info(f"📋 Available ZAP scan policies: {available_policies}")
-                    
-                    # Use the first available policy, or 'Default Policy' if it exists
-                    scan_policy = None
-                    if 'Default Policy' in available_policies:
-                        scan_policy = 'Default Policy'
-                    elif available_policies:
-                        scan_policy = available_policies[0]
-                    else:
-                        logger.warning("⚠️ No scan policies available, skipping active scan")
-                        return {'vulnerabilities': [], 'skipped': 'No scan policies available'}
-                        
-                except Exception as e:
-                    logger.warning(f"⚠️ Could not get scan policies: {e}, trying without policy")
-                    scan_policy = None
-                
-                ascan_params = {
-                    'url': target_url,
-                    'contextName': context_name,  # Use contextName instead of contextId for better compatibility
-                    'threadCount': '5'
-                }
-                
-                # Only add scanPolicyName if we have a valid policy
-                if scan_policy:
-                    ascan_params['scanPolicyName'] = scan_policy
-                
-                self._zap_request('ascan/action/scan', ascan_params)
-                logger.info(f"⚡ ZAP active scan started with policy: {scan_policy or 'default'}")
-                
-                # Wait for active scan to complete
-                self._wait_for_ascan_completion()
-            except Exception as ascan_error:
-                logger.warning(f"Active scan failed: {ascan_error}")
-                # Continue with spider results and endpoint info instead of failing completely
+            # Run enhanced active scan with max coverage settings
+            self._run_enhanced_active_scan(target_url, context_name)
             
-            # Get alerts (even if active scan failed)
-            alerts = []
-            try:
-                alerts = self._get_zap_alerts()
-            except Exception as alert_error:
-                logger.warning(f"Failed to get ZAP alerts: {alert_error}")
+            # Get alerts with enhanced filtering
+            alerts = self._get_enhanced_zap_alerts()
             
             # Convert alerts to vulnerabilities with enhanced information
             vulnerabilities = self._convert_zap_alerts_to_vulnerabilities(alerts, endpoint_info, endpoint)
             
-            # Return results even if some parts failed
+            # Return enhanced results
             return {
                 'vulnerabilities': vulnerabilities,
                 'alerts_count': len(alerts),
                 'endpoint_info': endpoint_info,
                 'zap_context': context_name,
-                'partial_scan': len(alerts) == 0  # Indicate if this was a partial scan
+                'scan_type': 'enhanced_zap',
+                'max_coverage_enabled': True
             }
             
         except Exception as e:
-            logger.error(f"ZAP scan failed: {e}")
+            logger.error(f"Enhanced ZAP scan failed: {e}")
             return {'vulnerabilities': [], 'error': str(e)}
     
     def _run_sqlmap_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
@@ -745,48 +686,79 @@ Content-Length: 100
             return '1'
     
     def _setup_zap_context_with_headers(self, auth_headers: Dict[str, str]) -> str:
-        """Setup ZAP context with authorization headers"""
+        """Setup ZAP context and configure Replacer rules for headers"""
         try:
             # Create context
             context_id = self._setup_zap_context()
             
-            # Get the context name we're using
-            contexts = self._zap_request('context/view/contextList')
-            
-            # Handle both old and new ZAP API response formats
-            if 'contextList' in contexts:
-                # New format (ZAP 2.12+) - context list is nested
-                context_list = contexts['contextList']
-            else:
-                # Old format or fallback
-                context_list = contexts.get('contextList', [])
-            
-            context_name = context_list[0] if context_list else 'api_context'
-            
-            # Add authorization headers to context if configured
+            # Setup Replacer rules for headers instead of adding to context
             if auth_headers:
-                for header_name, header_value in auth_headers.items():
-                    try:
-                        self._zap_request('context/action/includeInContext', {
-                            'contextName': context_name,
-                            'regex': f'.*{header_name}.*'
-                        })
-                        
-                        # Add header to context
-                        self._zap_request('context/action/setContextInScope', {
-                            'contextName': context_name,
-                            'booleanInScope': 'true'
-                        })
-                        
-                        logger.info(f"Added header {header_name} to ZAP context")
-                    except Exception as e:
-                        logger.warning(f"Failed to add header {header_name} to ZAP context: {e}")
+                self._setup_zap_replacer_rules(auth_headers)
             
             return context_id
             
         except Exception as e:
             logger.warning(f"Failed to setup ZAP context with headers: {e}")
             return self._setup_zap_context()
+    
+    def _setup_zap_replacer_rules(self, auth_headers: Dict[str, str]):
+        """Setup ZAP Replacer rules for authorization headers"""
+        try:
+            # Check if Replacer addon is available
+            if not self._check_zap_replacer_available():
+                logger.warning("ZAP Replacer addon not available, skipping header rules")
+                return
+            
+            # Clear existing rules to avoid duplicates
+            self._clear_zap_replacer_rules()
+            
+            for header_name, header_value in auth_headers.items():
+                try:
+                    # Add Replacer rule for the header
+                    self._zap_request('replacer/action/addRule', {
+                        'description': f'Add {header_name} header',
+                        'enabled': 'true',
+                        'matchType': 'REQ_HEADER',
+                        'matchString': header_name,
+                        'matchRegex': 'false',
+                        'replacement': header_value,
+                        'initiators': '1'  # Manual and Active scan
+                    })
+                    
+                    logger.info(f"✅ Added Replacer rule for {header_name} header")
+                except Exception as e:
+                    logger.warning(f"Failed to add Replacer rule for {header_name}: {e}")
+                    
+        except Exception as e:
+            logger.warning(f"Failed to setup ZAP Replacer rules: {e}")
+    
+    def _check_zap_replacer_available(self) -> bool:
+        """Check if ZAP Replacer addon is available"""
+        try:
+            # Try to get Replacer rules list
+            response = self._zap_request('replacer/view/rules')
+            return True
+        except Exception as e:
+            logger.debug(f"ZAP Replacer addon not available: {e}")
+            return False
+    
+    def _clear_zap_replacer_rules(self):
+        """Clear existing Replacer rules to avoid duplicates"""
+        try:
+            # Get existing rules
+            rules = self._zap_request('replacer/view/rules')
+            if 'rules' in rules:
+                for rule in rules['rules']:
+                    if 'description' in rule and 'Add' in rule['description'] and 'header' in rule['description']:
+                        try:
+                            self._zap_request('replacer/action/removeRule', {
+                                'description': rule['description']
+                            })
+                            logger.debug(f"Removed existing Replacer rule: {rule['description']}")
+                        except Exception as e:
+                            logger.debug(f"Failed to remove rule {rule['description']}: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to clear Replacer rules: {e}")
     
     def _wait_for_spider_completion(self, timeout: int = 300):
         """Wait for ZAP spider to complete"""
@@ -1035,12 +1007,12 @@ Content-Length: 100
         return vulnerabilities
     
     def _run_nuclei_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
-        """Run Nuclei scan with proper HTTP method support"""
+        """Run enhanced Nuclei scan with universal templates"""
         try:
             # Build target URL
             target_url = self._build_target_url(endpoint, param_values)
             method = endpoint.get('method', 'GET').upper()
-            logger.info(f"🔍 Starting Nuclei scan for endpoint: {endpoint.get('path')}")
+            logger.info(f"🔍 Starting enhanced Nuclei scan for endpoint: {endpoint.get('path')}")
             logger.info(f"   Target URL: {target_url}")
             logger.info(f"   Method: {method}")
             logger.info(f"   Parameters: {param_values}")
@@ -1054,164 +1026,12 @@ Content-Length: 100
             auth_headers = self.get_auth_headers()
             logger.info(f"🔐 Authorization headers: {auth_headers}")
             
-            # Create Nuclei command with enhanced options
-            cmd = [
-                self.nuclei_path,
-                '-u', target_url,
-                '-t', Config.NUCLEI_TEMPLATES,  # Use configurable templates
-                '-severity', Config.NUCLEI_SEVERITY,  # Use configurable severity levels
-                '-rate-limit', str(Config.NUCLEI_RATE_LIMIT),  # Rate limiting
-                '-c', '50',  # Concurrent requests
-                '-timeout', '10',  # Request timeout
-                '-retries', '2',  # Retry failed requests
-                '-bulk-size', '25',  # Bulk size for scanning
-                '-stats',  # Show statistics
-                '-silent',  # Silent mode for automation
-                '-o', tempfile.gettempdir() + '/nuclei_output.json'  # Output file
-            ]
+            # Create universal templates if they don't exist
+            self._ensure_universal_templates()
             
-            # Add method-specific options
-            if method == 'POST':
-                cmd.extend(['-H', 'Content-Type: application/json'])
-                if param_values.get('request_body'):
-                    cmd.extend(['-body', json.dumps(param_values['request_body'])])
+            # Run enhanced Nuclei scan with universal templates
+            return self._run_enhanced_nuclei_scan(endpoint, param_values, target_url, auth_headers)
             
-            # Add authorization headers
-            for header_name, header_value in auth_headers.items():
-                cmd.extend(['-H', f'{header_name}: {header_value}'])
-            
-            logger.info(f"🚀 Running Nuclei with command: {' '.join(cmd)}")
-            
-            # Run Nuclei
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            
-            # Parse results
-            vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
-            
-            return {
-                'vulnerabilities': vulnerabilities,
-                'command': ' '.join(cmd),
-                'exit_code': result.returncode
-            }
-            
-            # Verify template file exists and has content
-            import os
-            if os.path.exists(temp_file_path):
-                with open(temp_file_path, 'r') as f:
-                    template_content_check = f.read()
-                logger.info(f"📄 Template file size: {len(template_content_check)} bytes")
-            else:
-                logger.error(f"❌ Template file not found: {temp_file_path}")
-                return {'vulnerabilities': [], 'error': 'Template file not created'}
-            
-            # Prepare Nuclei command with optimized timeout settings
-            nuclei_cmd = [
-                self.nuclei_path,
-                '-t', temp_file_path,
-                '-tags', 'api,swagger,openapi,rest,http',  # API-specific built-in templates
-                '-u', target_url,
-                '-jsonl',  # Output in JSONL format
-                '-silent',  # Silent mode
-                '-severity', 'info,low,medium,high,critical',  # All severities including info
-                '-timeout', '15',  # Optimized: 15 second timeout (reduced from 20)
-                '-rate-limit', '100'  # Optimized: 100 rate limit (reduced from 150)
-            ]
-            
-            logger.info(f"🚀 Executing Nuclei command: {' '.join(nuclei_cmd)}")
-            
-            # Run Nuclei scan with custom template
-            logger.info(f"⏱️  Starting Nuclei subprocess execution...")
-            start_time = time.time()
-            
-            # First run with custom template
-            logger.info(f"🔍 Phase 1: Running with custom template...")
-            
-            try:
-                result = subprocess.run(
-                    nuclei_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30  # Optimized: 30 second timeout for the entire scan (reduced from 45)
-                )
-                
-                execution_time = time.time() - start_time
-                logger.info(f"⏱️  Nuclei execution completed in {execution_time:.2f} seconds")
-                logger.info(f"📊 Nuclei return code: {result.returncode}")
-                logger.info(f"📄 Nuclei stdout length: {len(result.stdout)} characters")
-                logger.info(f"⚠️  Nuclei stderr length: {len(result.stderr)} characters")
-                
-                if result.stderr:
-                    logger.warning(f"⚠️  Nuclei stderr output: {result.stderr}")
-                
-                # Parse results from custom template
-                logger.info(f"🔍 Parsing Nuclei results from custom template...")
-                custom_vulnerabilities = self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
-                logger.info(f"🎯 Found {len(custom_vulnerabilities)} vulnerabilities from custom template")
-                
-                # Second phase: Run with built-in API security templates
-                logger.info(f"🔍 Phase 2: Running with built-in API security templates...")
-                builtin_cmd = [
-                    self.nuclei_path,
-                    '-tags', 'api,swagger,openapi,rest,http',
-                    '-u', target_url,
-                    '-jsonl',
-                    '-silent',
-                    '-severity', 'info,low,medium,high,critical',
-                    '-timeout', '15',  # Optimized: 15 second timeout
-                    '-rate-limit', '100'  # Optimized: 100 rate limit
-                ]
-                
-                # Add authorization headers to built-in scan
-                if auth_headers:
-                    for header_name, header_value in auth_headers.items():
-                        builtin_cmd.extend(['-H', f'{header_name}: {header_value}'])
-                
-                logger.info(f"🚀 Executing built-in templates command: {' '.join(builtin_cmd)}")
-                
-                builtin_result = subprocess.run(
-                    builtin_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30  # Optimized: 30 second timeout
-                )
-                
-                logger.info(f"📊 Built-in templates return code: {builtin_result.returncode}")
-                logger.info(f"📄 Built-in templates stdout length: {len(builtin_result.stdout)} characters")
-                
-                # Parse results from built-in templates
-                builtin_vulnerabilities = self._parse_nuclei_results(builtin_result.stdout, builtin_result.stderr, endpoint)
-                logger.info(f"🎯 Found {len(builtin_vulnerabilities)} vulnerabilities from built-in templates")
-                
-                # Combine results
-                all_vulnerabilities = custom_vulnerabilities + builtin_vulnerabilities
-                logger.info(f"🎯 Total vulnerabilities found: {len(all_vulnerabilities)}")
-                
-                return {
-                    'vulnerabilities': all_vulnerabilities,
-                    'custom_vulnerabilities': custom_vulnerabilities,
-                    'builtin_vulnerabilities': builtin_vulnerabilities,
-                    'stdout': result.stdout + "\n" + builtin_result.stdout,
-                    'stderr': result.stderr + "\n" + builtin_result.stderr,
-                    'return_code': result.returncode
-                }
-                
-            finally:
-                # Clean up temporary template file
-                try:
-                    if os.path.exists(temp_file_path):
-                        os.unlink(temp_file_path)
-                        logger.info(f"🧹 Cleaned up temporary template file: {temp_file_path}")
-                except Exception as e:
-                    logger.warning(f"⚠️  Failed to clean up template file: {e}")
-            
-        except subprocess.TimeoutExpired:
-            logger.error(f"Nuclei scan timed out for {target_url}")
-            return {
-                'vulnerabilities': [],
-                'error': 'Scan timed out',
-                'stdout': '',
-                'stderr': 'Timeout after 45 seconds'
-            }
         except Exception as e:
             logger.error(f"Nuclei scan failed for {target_url}: {e}")
             return {
@@ -1296,6 +1116,433 @@ requests:
 """
         
         return template
+    
+    def _ensure_universal_templates(self):
+        """Ensure universal templates exist"""
+        try:
+            # Check if universal templates directory is empty
+            universal_dir = self.template_manager.universal_dir
+            if not any(universal_dir.glob('*.yaml')):
+                logger.info("🔧 Creating universal templates...")
+                self.template_manager.create_universal_templates()
+            else:
+                logger.info("✅ Universal templates already exist")
+        except Exception as e:
+            logger.warning(f"Failed to ensure universal templates: {e}")
+    
+    def _run_enhanced_nuclei_scan(self, endpoint: Dict, param_values: Dict, target_url: str, auth_headers: Dict) -> Dict:
+        """Run enhanced Nuclei scan with universal templates"""
+        try:
+            logger.info("🚀 Starting enhanced Nuclei scan with universal templates...")
+            
+            # Phase 1: Run with universal templates
+            universal_vulnerabilities = self._run_nuclei_with_universal_templates(target_url, auth_headers, endpoint)
+            logger.info(f"🎯 Found {len(universal_vulnerabilities)} vulnerabilities from universal templates")
+            
+            # Phase 2: Run with endpoint-specific template
+            endpoint_vulnerabilities = self._run_nuclei_with_endpoint_template(endpoint, param_values, target_url, auth_headers)
+            logger.info(f"🎯 Found {len(endpoint_vulnerabilities)} vulnerabilities from endpoint-specific template")
+            
+            # Phase 3: Run with built-in API templates
+            builtin_vulnerabilities = self._run_nuclei_with_builtin_templates(target_url, auth_headers, endpoint)
+            logger.info(f"🎯 Found {len(builtin_vulnerabilities)} vulnerabilities from built-in templates")
+            
+            # Combine and deduplicate results
+            all_vulnerabilities = self._combine_nuclei_results(universal_vulnerabilities, endpoint_vulnerabilities, builtin_vulnerabilities)
+            logger.info(f"🎯 Total unique vulnerabilities found: {len(all_vulnerabilities)}")
+            
+            return {
+                'vulnerabilities': all_vulnerabilities,
+                'universal_vulnerabilities': universal_vulnerabilities,
+                'endpoint_vulnerabilities': endpoint_vulnerabilities,
+                'builtin_vulnerabilities': builtin_vulnerabilities,
+                'scan_type': 'enhanced_nuclei'
+            }
+            
+        except Exception as e:
+            logger.error(f"Enhanced Nuclei scan failed: {e}")
+            return {
+                'vulnerabilities': [],
+                'error': str(e),
+                'scan_type': 'enhanced_nuclei'
+            }
+    
+    def _run_nuclei_with_universal_templates(self, target_url: str, auth_headers: Dict, endpoint: Dict) -> List[Dict]:
+        """Run Nuclei with universal templates"""
+        try:
+            universal_dir = self.template_manager.universal_dir
+            template_files = list(universal_dir.glob('*.yaml'))
+            
+            if not template_files:
+                logger.warning("No universal templates found")
+                return []
+            
+            # Create temporary directory for templates
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Copy universal templates to temp directory
+                for template_file in template_files:
+                    import shutil
+                    shutil.copy2(template_file, temp_dir)
+                
+                # Run Nuclei with universal templates
+                cmd = [
+                    self.nuclei_path,
+                    '-t', temp_dir,
+                    '-u', target_url,
+                    '-jsonl',
+                    '-silent',
+                    '-severity', 'info,low,medium,high,critical',
+                    '-timeout', '15',
+                    '-rate-limit', '100',
+                    '-c', '20'
+                ]
+                
+                # Add authorization headers
+                for header_name, header_value in auth_headers.items():
+                    cmd.extend(['-H', f'{header_name}: {header_value}'])
+                
+                logger.info(f"🔍 Running Nuclei with universal templates...")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                
+                return self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
+                
+        except Exception as e:
+            logger.warning(f"Universal templates scan failed: {e}")
+            return []
+    
+    def _run_nuclei_with_endpoint_template(self, endpoint: Dict, param_values: Dict, target_url: str, auth_headers: Dict) -> List[Dict]:
+        """Run Nuclei with endpoint-specific template"""
+        try:
+            # Create endpoint-specific template
+            template_id = self.template_manager.create_endpoint_specific_template(endpoint, param_values, auth_headers)
+            template_path = self.template_manager.get_template_path(template_id)
+            
+            if not template_path:
+                logger.warning("Failed to create endpoint-specific template")
+                return []
+            
+            # Run Nuclei with endpoint-specific template
+            cmd = [
+                self.nuclei_path,
+                '-t', str(template_path),
+                '-u', target_url,
+                '-jsonl',
+                '-silent',
+                '-severity', 'info,low,medium,high,critical',
+                '-timeout', '15',
+                '-rate-limit', '100'
+            ]
+            
+            logger.info(f"🔍 Running Nuclei with endpoint-specific template...")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            # Clean up template
+            try:
+                template_path.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to clean up endpoint template: {e}")
+            
+            return self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
+            
+        except Exception as e:
+            logger.warning(f"Endpoint-specific template scan failed: {e}")
+            return []
+    
+    def _run_nuclei_with_builtin_templates(self, target_url: str, auth_headers: Dict, endpoint: Dict) -> List[Dict]:
+        """Run Nuclei with built-in API templates"""
+        try:
+            cmd = [
+                self.nuclei_path,
+                '-tags', 'api,swagger,openapi,rest,http,graphql,soap',
+                '-u', target_url,
+                '-jsonl',
+                '-silent',
+                '-severity', 'info,low,medium,high,critical',
+                '-timeout', '15',
+                '-rate-limit', '100',
+                '-c', '20'
+            ]
+            
+            # Add authorization headers
+            for header_name, header_value in auth_headers.items():
+                cmd.extend(['-H', f'{header_name}: {header_value}'])
+            
+            logger.info(f"🔍 Running Nuclei with built-in API templates...")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            return self._parse_nuclei_results(result.stdout, result.stderr, endpoint)
+            
+        except Exception as e:
+            logger.warning(f"Built-in templates scan failed: {e}")
+            return []
+    
+    def _combine_nuclei_results(self, universal_vulns: List[Dict], endpoint_vulns: List[Dict], builtin_vulns: List[Dict]) -> List[Dict]:
+        """Combine and deduplicate Nuclei results"""
+        all_vulnerabilities = universal_vulns + endpoint_vulns + builtin_vulns
+        
+        # Simple deduplication based on name and URL
+        seen = set()
+        unique_vulnerabilities = []
+        
+        for vuln in all_vulnerabilities:
+            key = (vuln.get('name', ''), vuln.get('details', {}).get('matched_at', ''))
+            if key not in seen:
+                seen.add(key)
+                unique_vulnerabilities.append(vuln)
+        
+        return unique_vulnerabilities
+    
+    def _setup_enhanced_zap_context(self, target_url: str, auth_headers: Dict[str, str]) -> str:
+        """Setup enhanced ZAP context with max coverage configuration"""
+        try:
+            # Create or get existing context
+            context_name = 'api_security_context'
+            
+            # Try to create new context
+            try:
+                self._zap_request('context/action/newContext', {'contextName': context_name})
+                logger.info(f"✅ Created new ZAP context: {context_name}")
+            except Exception:
+                # Context might already exist, that's okay
+                logger.info(f"Using existing ZAP context: {context_name}")
+            
+            # Set context in scope
+            self._zap_request('context/action/setContextInScope', {
+                'contextName': context_name,
+                'booleanInScope': 'true'
+            })
+            
+            # Add domain to context
+            domain = target_url.split('/')[2]
+            self._zap_request('context/action/includeInContext', {
+                'contextName': context_name,
+                'regex': f'.*{domain}.*'
+            })
+            
+            # Setup enhanced replacer rules for authentication
+            self._setup_enhanced_replacer_rules(auth_headers, context_name)
+            
+            return context_name
+            
+        except Exception as e:
+            logger.warning(f"Failed to setup enhanced ZAP context: {e}")
+            return 'api_context'
+    
+    def _setup_enhanced_replacer_rules(self, auth_headers: Dict[str, str], context_name: str):
+        """Setup enhanced replacer rules for authentication"""
+        try:
+            # Clear existing rules
+            self._clear_zap_replacer_rules()
+            
+            for header_name, header_value in auth_headers.items():
+                try:
+                    # Add replacer rule for each header
+                    self._zap_request('replacer/action/addRule', {
+                        'description': f'Enhanced Auth - {header_name}',
+                        'enabled': 'true',
+                        'matchType': 'REQ_HEADER',
+                        'matchString': header_name,
+                        'matchRegex': 'false',
+                        'replacement': header_value,
+                        'initiators': '1,2,3'  # Manual, Active, and Spider scans
+                    })
+                    logger.info(f"✅ Added enhanced replacer rule for {header_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to add replacer rule for {header_name}: {e}")
+                    
+        except Exception as e:
+            logger.warning(f"Failed to setup enhanced replacer rules: {e}")
+    
+    def _configure_zap_max_coverage(self):
+        """Configure ZAP for maximum coverage based on the playbook"""
+        try:
+            logger.info("🔧 Configuring ZAP for maximum coverage...")
+            
+            # Enable alpha/beta rules
+            try:
+                self._zap_request('ascan/action/enableAllScanners')
+                logger.info("✅ Enabled all scanners including alpha/beta")
+            except Exception as e:
+                logger.warning(f"Failed to enable all scanners: {e}")
+            
+            # Set attack strength to HIGH for all scanners
+            try:
+                scanners = self._zap_request('ascan/view/scanners')
+                scanner_list = scanners.get('scanners', [])
+                
+                for scanner in scanner_list:
+                    scanner_id = scanner.get('id')
+                    if scanner_id:
+                        try:
+                            self._zap_request('ascan/action/setScannerAttackStrength', {
+                                'id': str(scanner_id),
+                                'attackStrength': 'HIGH'
+                            })
+                        except Exception as e:
+                            logger.debug(f"Failed to set attack strength for scanner {scanner_id}: {e}")
+                
+                logger.info(f"✅ Set attack strength to HIGH for {len(scanner_list)} scanners")
+            except Exception as e:
+                logger.warning(f"Failed to set attack strength: {e}")
+            
+            # Set alert threshold to LOW for more aggressive scanning
+            try:
+                scanners = self._zap_request('ascan/view/scanners')
+                scanner_list = scanners.get('scanners', [])
+                
+                for scanner in scanner_list:
+                    scanner_id = scanner.get('id')
+                    if scanner_id:
+                        try:
+                            self._zap_request('ascan/action/setScannerAlertThreshold', {
+                                'id': str(scanner_id),
+                                'alertThreshold': 'LOW'
+                            })
+                        except Exception as e:
+                            logger.debug(f"Failed to set alert threshold for scanner {scanner_id}: {e}")
+                
+                logger.info(f"✅ Set alert threshold to LOW for {len(scanner_list)} scanners")
+            except Exception as e:
+                logger.warning(f"Failed to set alert threshold: {e}")
+            
+            # Increase thread count for better performance
+            try:
+                self._zap_request('ascan/action/setOptionThreadPerHost', {'Integer': '8'})
+                logger.info("✅ Set thread count to 8 per host")
+            except Exception as e:
+                logger.warning(f"Failed to set thread count: {e}")
+            
+            # Set max scan duration
+            try:
+                self._zap_request('ascan/action/setOptionMaxScanDurationInMins', {'Integer': '60'})
+                logger.info("✅ Set max scan duration to 60 minutes")
+            except Exception as e:
+                logger.warning(f"Failed to set max scan duration: {e}")
+            
+            logger.info("🎯 ZAP configured for maximum coverage")
+            
+        except Exception as e:
+            logger.warning(f"Failed to configure ZAP for max coverage: {e}")
+    
+    def _add_target_to_zap_context(self, context_name: str, target_url: str):
+        """Add target URL to ZAP context with enhanced patterns"""
+        try:
+            # Add multiple URL patterns for better coverage
+            patterns = [
+                f'.*{target_url.split("/")[2]}.*',  # Domain
+                f'.*{target_url.replace("https://", "").replace("http://", "")}.*',  # Full path
+                f'.*{target_url}.*',  # Exact URL
+                '.*'  # Everything (fallback)
+            ]
+            
+            for pattern in patterns:
+                try:
+                    self._zap_request('context/action/includeInContext', {
+                        'contextName': context_name,
+                        'regex': pattern
+                    })
+                except Exception as e:
+                    logger.debug(f"Failed to add pattern {pattern}: {e}")
+            
+            # Wait for context to update
+            time.sleep(2)
+            
+            logger.info(f"✅ Added target URL patterns to ZAP context: {target_url}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to add target to ZAP context: {e}")
+    
+    def _run_enhanced_spider_scan(self, target_url: str, context_name: str):
+        """Run enhanced spider scan with max coverage settings"""
+        try:
+            spider_params = {
+                'url': target_url,
+                'contextName': context_name,
+                'maxDepth': '5',  # Increased depth
+                'maxChildren': '50',  # Increased children
+                'threadCount': '10',  # Increased threads
+                'postForm': 'true',  # Enable POST form handling
+                'processForm': 'true',  # Process forms
+                'parseComments': 'true',  # Parse comments
+                'parseRobotsTxt': 'true'  # Parse robots.txt
+            }
+            
+            self._zap_request('spider/action/scan', spider_params)
+            logger.info(f"🕷️ Enhanced spider scan started with depth 5, max children 50")
+            
+            # Wait for spider to complete with timeout
+            self._wait_for_spider_completion(timeout=600)  # 10 minutes
+            
+        except Exception as e:
+            logger.warning(f"Enhanced spider scan failed: {e}")
+    
+    def _run_enhanced_active_scan(self, target_url: str, context_name: str):
+        """Run enhanced active scan with max coverage settings"""
+        try:
+            # Get available scan policies
+            policies_response = self._zap_request('ascan/view/scanPolicyNames')
+            available_policies = policies_response.get('scanPolicyNames', [])
+            
+            # Use the most comprehensive policy available
+            scan_policy = None
+            preferred_policies = ['Pen Test', 'Dev Full', 'QA Full', 'Default Policy']
+            
+            for policy in preferred_policies:
+                if policy in available_policies:
+                    scan_policy = policy
+                    break
+            
+            if not scan_policy and available_policies:
+                scan_policy = available_policies[0]
+            
+            if not scan_policy:
+                logger.warning("⚠️ No scan policies available, skipping active scan")
+                return
+            
+            ascan_params = {
+                'url': target_url,
+                'contextName': context_name,
+                'threadCount': '8',  # Increased threads
+                'scanPolicyName': scan_policy
+            }
+            
+            self._zap_request('ascan/action/scan', ascan_params)
+            logger.info(f"⚡ Enhanced active scan started with policy: {scan_policy}")
+            
+            # Wait for active scan to complete with timeout
+            self._wait_for_ascan_completion(timeout=1200)  # 20 minutes
+            
+        except Exception as e:
+            logger.warning(f"Enhanced active scan failed: {e}")
+    
+    def _get_enhanced_zap_alerts(self) -> List[Dict]:
+        """Get enhanced ZAP alerts with filtering"""
+        try:
+            alerts = self._get_zap_alerts()
+            
+            # Filter out API-irrelevant alerts
+            filtered_alerts = []
+            irrelevant_alert_ids = [
+                '10038',  # CSP not set
+                '10035',  # HSTS not set
+                '10202',  # Anti-CSRF tokens
+                '10021',  # X-Frame-Options header not set
+                '10020'   # X-Content-Type-Options header missing
+            ]
+            
+            for alert in alerts:
+                alert_id = alert.get('pluginId', '')
+                if alert_id not in irrelevant_alert_ids:
+                    filtered_alerts.append(alert)
+                else:
+                    logger.debug(f"Filtered out API-irrelevant alert: {alert.get('name', 'Unknown')}")
+            
+            logger.info(f"📊 Enhanced alert filtering: {len(alerts)} total, {len(filtered_alerts)} relevant")
+            return filtered_alerts
+            
+        except Exception as e:
+            logger.warning(f"Failed to get enhanced ZAP alerts: {e}")
+            return []
     
     def _check_nuclei_availability(self) -> bool:
         """Check if Nuclei is available and working"""

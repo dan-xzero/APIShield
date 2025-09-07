@@ -1,0 +1,92 @@
+id: business-logic-universal
+info:
+  name: Business Logic - Universal
+  author: APIShield
+  severity: high
+  description: Tests for business logic vulnerabilities in APIs
+  tags: api,business-logic,security,logic-flaw
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Business_Logic_Vulnerabilities
+
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "price": "-100",
+        "quantity": "999999",
+        "discount": "200"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "created"
+          - "updated"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "status": "completed",
+        "paid": false,
+        "shipped": true
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "updated"
+          - "modified"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "user_id": "1",
+        "role": "admin",
+        "permissions": ["*"]
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "created"
+          - "updated"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and

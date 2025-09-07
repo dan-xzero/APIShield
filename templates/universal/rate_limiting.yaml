@@ -1,0 +1,85 @@
+id: rate-limiting-universal
+info:
+  name: Rate Limiting - Universal
+  author: APIShield
+  severity: medium
+  description: Tests for rate limiting and DoS protection vulnerabilities
+  tags: api,rate-limiting,dos,security
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Denial_of_Service
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "rate limit"
+          - "too many requests"
+          - "quota exceeded"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "data": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "429"
+          - "rate limit"
+          - "throttle"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "large_data": "{{randstr(10000)}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "payload too large"
+          - "request too large"
+          - "413"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and

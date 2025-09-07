@@ -1,0 +1,93 @@
+id: input-validation-universal
+info:
+  name: Input Validation - Universal
+  author: APIShield
+  severity: medium
+  description: Tests for input validation vulnerabilities in APIs
+  tags: api,input-validation,sql-injection,xss,injection
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/SQL_Injection
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "sql"
+          - "mysql"
+          - "postgresql"
+          - "oracle"
+          - "syntax error"
+          - "sql error"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 500
+          - 502
+          - 503
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "query": "'; DROP TABLE users; --",
+        "search": "<script>alert('xss')</script>",
+        "input": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "error"
+          - "exception"
+          - "invalid"
+          - "malformed"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "data": "{{randstr}}",
+        "length": "999999999",
+        "size": "-1"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "overflow"
+          - "too large"
+          - "invalid size"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 400
+          - 413
+          - 500
+        condition: and

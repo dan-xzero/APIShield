@@ -1,0 +1,81 @@
+id: authz-bypass-universal
+info:
+  name: Authorization Bypass - Universal
+  author: APIShield
+  severity: high
+  description: Tests for authorization bypass vulnerabilities in APIs
+  tags: api,authorization,authz-bypass,security,idor
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Insecure_Direct_Object_References
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "forbidden"
+          - "access denied"
+          - "unauthorized"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "id": "1",
+        "role": "admin",
+        "permissions": ["read", "write", "delete"]
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "success"
+          - "updated"
+          - "modified"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "deleted"
+          - "removed"
+          - "success"
+        condition: and
+        part: body
+      - type: status
+        status:
+          - 200
+          - 204
+        condition: and

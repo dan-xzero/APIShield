@@ -1,0 +1,87 @@
+id: error-handling-universal
+info:
+  name: Error Handling - Universal
+  author: APIShield
+  severity: medium
+  description: Tests for error handling and information disclosure vulnerabilities
+  tags: api,error-handling,information-disclosure,security
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://owasp.org/www-community/attacks/Information_disclosure
+
+requests:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "stack trace"
+          - "exception"
+          - "error at line"
+          - "file:"
+          - "path:"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "database"
+          - "connection"
+          - "sql"
+          - "mysql"
+          - "postgresql"
+        condition: and
+        part: body
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    body: |
+      {
+        "invalid": "{{randstr}}"
+      }
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "debug"
+          - "trace"
+          - "verbose"
+        condition: and
+        part: body
+      - type: word
+        words:
+          - "internal"
+          - "server"
+          - "error"
+        condition: and
+        part: body
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}/nonexistent"
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "not found"
+          - "404"
+          - "missing"
+        condition: and
+        part: body
+        negative: true
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and

@@ -1,0 +1,51 @@
+id: endpoint-483ec21f
+info:
+  author: APIShield
+  description: Security scan for POST /v1/shipment/labels
+  name: Endpoint Scan - POST /v1/shipment/labels
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"provider": "provider: ACME_Corporation_API_v1.0", "request_body": {"provider":
+    "UPS", "package": {"weight": 2.5, "dimensions": {"length": 12, "width": 8, "height":
+    6}}, "sender": {"name": "John Doe", "address": "123 Main St", "city": "Anytown",
+    "state": "CA", "zipcode": "12345", "country": "USA"}, "recipient": {"name": "Jane
+    Smith", "address": "456 Elm St", "city": "Sometown", "state": "NY", "zipcode":
+    "54321", "country": "USA"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/v1/shipment/labels'

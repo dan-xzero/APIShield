@@ -1,0 +1,46 @@
+id: endpoint-aca9369e
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/kerry/{order_id}/sync
+  name: Endpoint Scan - POST /warehouse-orders/kerry/{order_id}/sync
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"order_id": "order_id: ORD123456789"}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/kerry/{order_id}/sync'

@@ -1,0 +1,48 @@
+id: endpoint-8dcd4149
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/kerry/cancelled-orders
+  name: Endpoint Scan - POST /warehouse-orders/kerry/cancelled-orders
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"order_id": "ORD123456", "reason": "Out of stock", "cancellation_date":
+    "2022-05-20T10:30:00Z", "cancelled_by": {"user_id": "user123", "username": "johndoe"},
+    "additional_info": "Customer requested cancellation due to delayed shipment"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/kerry/cancelled-orders'

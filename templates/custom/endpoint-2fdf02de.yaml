@@ -1,0 +1,46 @@
+id: endpoint-2fdf02de
+info:
+  author: APIShield
+  description: Security scan for POST /warehouse-orders/{warehouseOrderId}/sync-dispatch
+  name: Endpoint Scan - POST /warehouse-orders/{warehouseOrderId}/sync-dispatch
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"warehouseOrderId": 12345}'
+  headers:
+    Accept: application/json
+    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/warehouse-orders/{warehouseOrderId}/sync-dispatch'
