@@ -398,7 +398,16 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                 try:
                     from app.utils.slack_notifier import slack_notifier
                     
-                    # Prepare scan completion data for notification
+                    # Get actual vulnerability counts from database (not raw scan results)
+                    db_vulnerabilities = Vulnerability.query.filter_by(scan_id=scan.id).all()
+                    db_vuln_counts = {'high': 0, 'medium': 0, 'low': 0, 'critical': 0}
+                    for vuln in db_vulnerabilities:
+                        severity = vuln.severity.lower()
+                        db_vuln_counts[severity] = db_vuln_counts.get(severity, 0) + 1
+                    
+                    logger.info(f"📊 Database vulnerability counts: {db_vuln_counts}")
+                    
+                    # Prepare scan completion data for notification using database results
                     completion_data = {
                         'scan_type': scan_type.lower().replace('-', '_'),
                         'service_name': endpoint.service.name if endpoint.service else 'Unknown',
@@ -407,18 +416,15 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                         'scan_id': str(scan.id),
                         'duration': scan_results.get('duration', 0),
                         'tools_used': scan_results.get('tools_used', []),
-                        'vulnerabilities': vulnerabilities,
+                        'vulnerabilities': db_vulnerabilities,  # Use database results, not raw scan results
+                        'vulnerability_counts': db_vuln_counts,  # Add accurate counts
                         'is_service_scan': False
                     }
                     
                     slack_notifier.send_scan_completed(completion_data)
                     
-                    # Send individual vulnerability alerts only for high-risk findings
-                    # The SlackNotifier now handles deduplication automatically
-                    for vuln in vulnerabilities:
-                        if vuln.get('severity', '').lower() in ['high', 'critical']:
-                            vuln['scan_id'] = str(scan.id)
-                            slack_notifier.send_vulnerability_alert(vuln)
+                    # Individual vulnerability alerts disabled - only send scan completion summary
+                    # This prevents spam and focuses on scan-level notifications
                     logger.info(f"✅ Slack notification sent")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to send Slack notification: {e}")

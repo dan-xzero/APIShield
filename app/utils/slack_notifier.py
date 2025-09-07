@@ -184,7 +184,7 @@ class SlackNotifier:
                 title = f"🚀 {scan_type.title()} Scan Started - Service"
                 message = f"Starting comprehensive security scan for service: **{service_name}**"
                 scan_scope = f"Scanning {endpoint_count} endpoints in service"
-            else:
+        else:
                 title = f"🚀 {scan_type.title()} Scan Started - Endpoint"
                 message = f"Starting security scan for endpoint: **{endpoint_method} {endpoint_path}**"
                 scan_scope = f"Single endpoint scan"
@@ -289,13 +289,24 @@ class SlackNotifier:
             vulnerabilities = scan_data.get('vulnerabilities', [])
             is_service_scan = scan_data.get('is_service_scan', False)
             
-            # Count vulnerabilities by severity
-            vuln_counts = {'high': 0, 'medium': 0, 'low': 0, 'critical': 0}
-            for vuln in vulnerabilities:
-                severity = vuln.get('severity', 'low').lower()
-                vuln_counts[severity] = vuln_counts.get(severity, 0) + 1
-            
-            total_vulns = len(vulnerabilities)
+            # Use provided vulnerability counts if available, otherwise count from vulnerabilities list
+            if 'vulnerability_counts' in scan_data:
+                vuln_counts = scan_data['vulnerability_counts']
+                total_vulns = sum(vuln_counts.values())
+                logger.info(f"📊 Using provided vulnerability counts: {vuln_counts}")
+            else:
+                # Fallback to counting from vulnerabilities list
+                vuln_counts = {'high': 0, 'medium': 0, 'low': 0, 'critical': 0}
+                for vuln in vulnerabilities:
+                    if hasattr(vuln, 'severity'):
+                        # Database object
+                        severity = vuln.severity.lower()
+                    else:
+                        # Dictionary object
+                        severity = vuln.get('severity', 'low').lower()
+                    vuln_counts[severity] = vuln_counts.get(severity, 0) + 1
+                total_vulns = len(vulnerabilities)
+                logger.info(f"📊 Counted vulnerabilities from list: {vuln_counts}")
             
             # Determine color and emoji based on vulnerabilities
             if vuln_counts['critical'] > 0:
@@ -369,14 +380,27 @@ class SlackNotifier:
                 })
                 
                 # Add top vulnerabilities (max 3)
-                top_vulns = sorted(vulnerabilities, key=lambda x: {
-                    'critical': 4, 'high': 3, 'medium': 2, 'low': 1
-                }.get(x.get('severity', 'low').lower(), 1), reverse=True)[:3]
+                def get_severity_priority(vuln):
+                    if hasattr(vuln, 'severity'):
+                        # Database object
+                        severity = vuln.severity.lower()
+                    else:
+                        # Dictionary object
+                        severity = vuln.get('severity', 'low').lower()
+                    return {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}.get(severity, 1)
+                
+                top_vulns = sorted(vulnerabilities, key=get_severity_priority, reverse=True)[:3]
                 
                 vuln_details = []
                 for vuln in top_vulns:
-                    name = vuln.get('name', 'Unknown')[:50]
-                    severity = vuln.get('severity', 'unknown').upper()
+                    if hasattr(vuln, 'name'):
+                        # Database object
+                        name = vuln.name[:50]
+                        severity = vuln.severity.upper()
+                    else:
+                        # Dictionary object
+                        name = vuln.get('name', 'Unknown')[:50]
+                        severity = vuln.get('severity', 'unknown').upper()
                     vuln_details.append(f"• {severity}: {name}")
                 
                 if vuln_details:
