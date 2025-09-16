@@ -193,6 +193,10 @@ class Vulnerability(db.Model):
     # Timestamps
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # AI Validation fields
+    ai_confidence = db.Column(db.String(50), nullable=True)
+    ai_analysis = db.Column(Text, nullable=True)
     
     # Relationships
     endpoint = db.relationship('Endpoint', backref='vulnerabilities')
@@ -228,6 +232,12 @@ class Vulnerability(db.Model):
             existing_vuln.last_seen_at = datetime.now(timezone.utc)
             existing_vuln.occurrence_count += 1
             existing_vuln.updated_at = datetime.now(timezone.utc)
+
+            # If new AI analysis is provided, update it
+            if 'ai_analysis' in kwargs and kwargs['ai_analysis']:
+                existing_vuln.ai_analysis = kwargs['ai_analysis']
+            if 'ai_confidence' in kwargs and kwargs['ai_confidence']:
+                existing_vuln.ai_confidence = kwargs['ai_confidence']
             
             # Update scan reference (create new scan-vulnerability relationship)
             # Note: We keep the original vulnerability but track new occurrences
@@ -251,6 +261,8 @@ class Vulnerability(db.Model):
                 first_seen_at=datetime.now(timezone.utc),
                 last_seen_at=datetime.now(timezone.utc),
                 occurrence_count=1,
+                ai_confidence=kwargs.get('ai_confidence'),
+                ai_analysis=kwargs.get('ai_analysis'),
                 **kwargs
             )
             

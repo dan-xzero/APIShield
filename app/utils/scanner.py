@@ -35,6 +35,9 @@ class SecurityScanner:
         self.ssrfmap_path = Config.SSRFMAP_PATH
         self.xsstrike_path = Config.XSSTRIKE_PATH
         self.nuclei_path = Config.NUCLEI_PATH
+        self.vulnapi_path = Config.VULNAPI_PATH
+        self.wuppiefuzz_path = Config.WUPPIEFUZZ_PATH
+        self.graphql_cop_path = Config.GRAPHQL_COP_PATH
         
         # Template manager
         self.template_manager = APIShieldTemplateManager()
@@ -178,6 +181,33 @@ class SecurityScanner:
                     logger.warning(f"Business logic testing failed: {e}")
                     scan_results['tools_used'].append('business_logic_tester(failed)')
             
+            if scan_type in ['vulnapi', 'combined']:
+                try:
+                    vulnapi_results = self._run_vulnapi_scan(endpoint, param_values)
+                    scan_results['vulnerabilities'].extend(vulnapi_results.get('vulnerabilities', []))
+                    scan_results['tools_used'].append('vulnapi')
+                except Exception as e:
+                    logger.warning(f"VulnAPI scan failed: {e}")
+                    scan_results['tools_used'].append('vulnapi(failed)')
+
+            if scan_type in ['wuppiefuzz', 'combined']:
+                try:
+                    wuppiefuzz_results = self._run_wuppiefuzz_scan(endpoint, param_values)
+                    scan_results['vulnerabilities'].extend(wuppiefuzz_results.get('vulnerabilities', []))
+                    scan_results['tools_used'].append('wuppiefuzz')
+                except Exception as e:
+                    logger.warning(f"WuppieFuzz scan failed: {e}")
+                    scan_results['tools_used'].append('wuppiefuzz(failed)')
+
+            if 'graphql' in endpoint.get('path', '') and scan_type in ['graphql', 'combined']:
+                try:
+                    graphql_cop_results = self._run_graphql_cop_scan(endpoint, param_values)
+                    scan_results['vulnerabilities'].extend(graphql_cop_results.get('vulnerabilities', []))
+                    scan_results['tools_used'].append('graphql-cop')
+                except Exception as e:
+                    logger.warning(f"GraphQL Cop scan failed: {e}")
+                    scan_results['tools_used'].append('graphql-cop(failed)')
+
             if scan_type in ['enhanced', 'combined'] and Config.ENABLE_BUSINESS_LOGIC_TESTING:
                 try:
                     jwt_results = self.jwt_security_tester.test_jwt_vulnerabilities(
@@ -350,6 +380,7 @@ class SecurityScanner:
                     self.sqlmap_path,
                     '-r', request_file.name,  # Use request file
                     '--batch',  # Non-interactive mode
+                    '--proxy', self.zap_api_url,
                     '--random-agent',  # Random user agent
                     '--level', str(Config.SQLMAP_LEVEL),  # Configurable scan level
                     '--risk', str(Config.SQLMAP_RISK),    # Configurable risk level
@@ -375,7 +406,7 @@ class SecurityScanner:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
                 
                 # Parse results
-                vulnerabilities = self._parse_sqlmap_results(result.stdout, result.stderr)
+                vulnerabilities = self._parse_sqlmap_results(result.stdout, result.stderr, target_url)
                 
                 return {
                     'vulnerabilities': vulnerabilities,
@@ -431,14 +462,15 @@ Content-Length: 100
                     '-r', request_file.name,
                     '-p', 'url',  # Parameter to test
                     '-m', 'portscan,redis,aws,ec2',  # Modules to run
-                    '--level', '1'  # Basic level
+                    '--level', '1',  # Basic level
+                    '--proxy', self.zap_api_url
                 ]
                 
                 # Run SSRFMap
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd='./SSRFmap')
                 
                 # Parse results
-                vulnerabilities = self._parse_ssrfmap_results(result.stdout, result.stderr)
+                vulnerabilities = self._parse_ssrfmap_results(result.stdout, result.stderr, target_url)
                 
                 return {
                     'vulnerabilities': vulnerabilities,
@@ -475,14 +507,15 @@ Content-Length: 100
                 '--skip-dom',  # Skip DOM XSS
                 '--blind',  # Blind XSS
                 '--skip-poc',  # Skip proof of concept
-                '--output', tempfile.gettempdir() + '/xsstrike_output'
+                '--output', tempfile.gettempdir() + '/xsstrike_output',
+                '--proxy', self.zap_api_url
             ]
             
             # Run XSStrike
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             # Parse results
-            vulnerabilities = self._parse_xsstrike_results(result.stdout, result.stderr)
+            vulnerabilities = self._parse_xsstrike_results(result.stdout, result.stderr, target_url)
             
             return {
                 'vulnerabilities': vulnerabilities,
@@ -571,6 +604,40 @@ Content-Length: 100
         except Exception as e:
             logger.error(f"❌ Unexpected error in ZAP API request for {endpoint}: {e}")
             raise
+
+    def _get_request_response_from_zap(self, url: str) -> (Optional[Dict], Optional[Dict]):
+        """Get request and response from ZAP history for a given URL"""
+        try:
+            # To get the message, we need to find its ID first
+            # We can use the `messagesByUrl` view to get messages for a specific URL
+            messages_by_url = self._zap_request('core/view/messagesByUrl', {'url': url})
+
+            # The response is a list of messages. We'll take the last one.
+            if messages_by_url and 'messagesByUrl' in messages_by_url and messages_by_url['messagesByUrl']:
+                message_id = messages_by_url['messagesByUrl'][-1]['id']
+
+                # Now get the full message content
+                message_content = self._zap_request('core/view/message', {'id': message_id})
+
+                if message_content and 'message' in message_content:
+                    msg = message_content['message']
+                    request = {
+                        'method': msg.get('requestHeader', '').split(' ')[0],
+                        'url': url,
+                        'headers': msg.get('requestHeader'),
+                        'body': msg.get('requestBody')
+                    }
+                    response = {
+                        'status_code': int(msg.get('responseHeader', '').split(' ')[1]) if ' ' in msg.get('responseHeader', '') else None,
+                        'headers': msg.get('responseHeader'),
+                        'body': msg.get('responseBody')
+                    }
+                    return request, response
+
+        except Exception as e:
+            logger.warning(f"Could not retrieve request/response from ZAP for {url}: {e}")
+
+        return None, None
     
     def _setup_zap_context(self) -> str:
         """Setup ZAP context for scanning"""
@@ -932,12 +999,13 @@ Content-Length: 100
         
         return False
     
-    def _parse_sqlmap_results(self, stdout: str, stderr: str) -> List[Dict]:
+    def _parse_sqlmap_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
         """Parse SQLMap results"""
         vulnerabilities = []
         
         # Look for SQL injection findings
         if 'sqlmap identified the following injection point' in stdout:
+            request, response = self._get_request_response_from_zap(url)
             vulnerability = {
                 'name': 'SQL Injection',
                 'description': 'SQL injection vulnerability detected by SQLMap',
@@ -950,19 +1018,22 @@ Content-Length: 100
                 'details': {
                     'tool': 'sqlmap',
                     'stdout': stdout,
-                    'stderr': stderr
+                    'stderr': stderr,
+                    'request': request,
+                    'response': response
                 }
             }
             vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
-    def _parse_ssrfmap_results(self, stdout: str, stderr: str) -> List[Dict]:
+    def _parse_ssrfmap_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
         """Parse SSRFMap results"""
         vulnerabilities = []
         
         # Look for SSRF findings
         if 'vulnerable' in stdout.lower() or 'ssrf' in stdout.lower():
+            request, response = self._get_request_response_from_zap(url)
             vulnerability = {
                 'name': 'Server-Side Request Forgery',
                 'description': 'SSRF vulnerability detected by SSRFMap',
@@ -975,19 +1046,22 @@ Content-Length: 100
                 'details': {
                     'tool': 'ssrfmap',
                     'stdout': stdout,
-                    'stderr': stderr
+                    'stderr': stderr,
+                    'request': request,
+                    'response': response
                 }
             }
             vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
-    def _parse_xsstrike_results(self, stdout: str, stderr: str) -> List[Dict]:
+    def _parse_xsstrike_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
         """Parse XSStrike results"""
         vulnerabilities = []
         
         # Look for XSS findings
         if 'vulnerable' in stdout.lower() or 'xss' in stdout.lower():
+            request, response = self._get_request_response_from_zap(url)
             vulnerability = {
                 'name': 'Cross-Site Scripting',
                 'description': 'XSS vulnerability detected by XSStrike',
@@ -1000,13 +1074,259 @@ Content-Length: 100
                 'details': {
                     'tool': 'xsstrike',
                     'stdout': stdout,
-                    'stderr': stderr
+                    'stderr': stderr,
+                    'request': request,
+                    'response': response
                 }
             }
             vulnerabilities.append(vulnerability)
         
         return vulnerabilities
     
+    def _run_vulnapi_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
+        """Run VulnAPI scan"""
+        logger.info("Running VulnAPI scan...")
+        try:
+            from app.models import ApiVersion # Import here to avoid circular dependency at top level
+
+            # Get OpenAPI spec
+            api_version_id = endpoint.get('api_version_id')
+            if not api_version_id:
+                return {'vulnerabilities': [], 'skipped': 'No API version ID provided'}
+
+            api_version = ApiVersion.query.get(api_version_id)
+            if not api_version or not api_version.spec_json:
+                return {'vulnerabilities': [], 'skipped': 'No OpenAPI spec found for this version'}
+
+            # Write spec to a temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as spec_file:
+                json.dump(api_version.spec_json, spec_file)
+                spec_file_path = spec_file.name
+
+            try:
+                # Construct VulnAPI command
+                cmd = [
+                    self.vulnapi_path,
+                    'scan',
+                    'openapi',
+                    spec_file_path,
+                    '--proxy', self.zap_api_url,
+                    '--json'
+                ]
+
+                # Handle authentication token
+                auth_token = self.get_auth_headers().get('Authorization')
+                if auth_token and 'Bearer' in auth_token:
+                    token = auth_token.split('Bearer ')[1]
+                    # Use a pipe to send the token to stdin
+                    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    stdout, stderr = process.communicate(input=token)
+                else:
+                    process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                    stdout = process.stdout
+                    stderr = process.stderr
+
+                # Parse results
+                # The URL for parsing will be the base URL from the OpenAPI spec
+                base_url = api_version.spec_json.get('servers', [{}])[0].get('url', '')
+                vulnerabilities = self._parse_vulnapi_results(stdout, stderr, base_url)
+
+                return {'vulnerabilities': vulnerabilities}
+
+            finally:
+                # Clean up temporary spec file
+                if os.path.exists(spec_file_path):
+                    os.unlink(spec_file_path)
+
+        except Exception as e:
+            logger.error(f"VulnAPI scan failed: {e}")
+            return {'vulnerabilities': [], 'error': str(e)}
+
+    def _parse_vulnapi_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
+        """Parse VulnAPI results from JSON output"""
+        vulnerabilities = []
+        try:
+            results = json.loads(stdout)
+            for res in results:
+                # Reconstruct the full URL
+                operation_path = res.get('operation_path', '')
+                full_url = urljoin(url, operation_path)
+                request, response = self._get_request_response_from_zap(full_url)
+
+                vulnerability = {
+                    'name': res.get('name', 'VulnAPI Finding'),
+                    'description': res.get('description', 'No description provided.'),
+                    'severity': res.get('risk_level', 'medium').lower(),
+                    'category': 'api_misconfiguration',  # Default category
+                    'evidence': json.dumps(res, indent=2),
+                    'endpoint_path': operation_path,
+                    'endpoint_method': res.get('operation_method', 'Unknown'),
+                    'tool': 'vulnapi',
+                    'details': {
+                        'tool': 'vulnapi',
+                        'cvss_score': res.get('cvss_score'),
+                        'owasp_category': res.get('owasp'),
+                        'raw_result': res,
+                        'request': request,
+                        'response': response
+                    }
+                }
+                vulnerabilities.append(vulnerability)
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse VulnAPI JSON output. Raw output: {stdout}")
+
+        return vulnerabilities
+
+    def _run_wuppiefuzz_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
+        """Run WuppieFuzz scan"""
+        logger.info("Running WuppieFuzz scan...")
+        try:
+            from app.models import ApiVersion
+
+            api_version_id = endpoint.get('api_version_id')
+            if not api_version_id:
+                return {'vulnerabilities': [], 'skipped': 'No API version ID provided'}
+
+            api_version = ApiVersion.query.get(api_version_id)
+            if not api_version or not api_version.spec_json:
+                return {'vulnerabilities': [], 'skipped': 'No OpenAPI spec found for this version'}
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as spec_file:
+                # WuppieFuzz prefers YAML
+                import yaml
+                yaml.dump(api_version.spec_json, spec_file)
+                spec_file_path = spec_file.name
+
+            try:
+                cmd = [
+                    self.wuppiefuzz_path,
+                    'fuzz',
+                    spec_file_path,
+                    # Assuming a JSON report option exists, e.g., --output-format json
+                    '--output-format', 'json'
+                ]
+
+                # Set proxy environment variable for WuppieFuzz to use
+                env = os.environ.copy()
+                env['HTTP_PROXY'] = self.zap_api_url
+                env['HTTPS_PROXY'] = self.zap_api_url
+
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env) # Fuzzing can take longer
+
+                base_url = api_version.spec_json.get('servers', [{}])[0].get('url', '')
+                vulnerabilities = self._parse_wuppiefuzz_results(process.stdout, process.stderr, base_url)
+
+                return {'vulnerabilities': vulnerabilities}
+
+            finally:
+                if os.path.exists(spec_file_path):
+                    os.unlink(spec_file_path)
+
+        except Exception as e:
+            logger.error(f"WuppieFuzz scan failed: {e}")
+            return {'vulnerabilities': [], 'error': str(e)}
+
+    def _parse_wuppiefuzz_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
+        """Parse WuppieFuzz results"""
+        logger.info("Parsing WuppieFuzz results...")
+        vulnerabilities = []
+        try:
+            results = json.loads(stdout)
+            for finding in results:
+                status_code = finding.get('response', {}).get('status_code')
+                if status_code and 500 <= status_code < 600:
+                    # This is a server error, which is a potential vulnerability
+
+                    # Reconstruct the full URL from the finding
+                    # This assumes the finding contains the path and method
+                    path = finding.get('request', {}).get('path', '')
+                    method = finding.get('request', {}).get('method', 'GET')
+                    full_url = urljoin(url, path)
+
+                    request, response = self._get_request_response_from_zap(full_url)
+
+                    vulnerability = {
+                        'name': f"Server Error (Fuzzing) - {status_code}",
+                        'description': f"WuppieFuzz discovered a server error ({status_code}) when fuzzing the endpoint. This could indicate a crash or an unhandled exception, which might be exploitable.",
+                        'severity': 'medium', # 5xx errors are generally medium to high
+                        'category': 'fuzzing',
+                        'evidence': json.dumps(finding, indent=2),
+                        'endpoint_path': path,
+                        'endpoint_method': method,
+                        'tool': 'wuppiefuzz',
+                        'details': {
+                            'tool': 'wuppiefuzz',
+                            'raw_result': finding,
+                            'request': request,
+                            'response': response
+                        }
+                    }
+                    vulnerabilities.append(vulnerability)
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse WuppieFuzz JSON output. Raw output: {stdout}")
+
+        return vulnerabilities
+
+    def _run_graphql_cop_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
+        """Run GraphQL Cop scan"""
+        logger.info("Running GraphQL Cop scan...")
+        try:
+            target_url = self._build_target_url(endpoint, param_values)
+
+            cmd = [
+                'python3',
+                self.graphql_cop_path,
+                '-t', target_url,
+                '-o', 'json',
+                '--proxy', self.zap_api_url
+            ]
+
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+            vulnerabilities = self._parse_graphql_cop_results(process.stdout, process.stderr, target_url)
+
+            return {'vulnerabilities': vulnerabilities}
+
+        except Exception as e:
+            logger.error(f"GraphQL Cop scan failed: {e}")
+            return {'vulnerabilities': [], 'error': str(e)}
+
+    def _parse_graphql_cop_results(self, stdout: str, stderr: str, url: str) -> List[Dict]:
+        """Parse GraphQL Cop results"""
+        logger.info("Parsing GraphQL Cop results...")
+        vulnerabilities = []
+        try:
+            results = json.loads(stdout)
+            for finding in results:
+                if finding.get('result'): # The 'result' field is a boolean indicating a finding
+                    # The 'curl_verify' field contains the curl command, which has the URL
+                    # We can parse this to get the exact URL, but for simplicity, we'll use the base URL for now
+                    # to fetch from ZAP. A more advanced implementation could parse the curl command.
+                    request, response = self._get_request_response_from_zap(url)
+
+                    vulnerability = {
+                        'name': f"GraphQL Security Issue: {finding.get('title')}",
+                        'description': finding.get('description'),
+                        'severity': finding.get('severity', 'medium').lower(),
+                        'category': 'graphql',
+                        'evidence': finding.get('curl_verify'),
+                        'endpoint_path': urlparse(url).path,
+                        'endpoint_method': 'POST', # GraphQL typically uses POST
+                        'tool': 'graphql-cop',
+                        'details': {
+                            'tool': 'graphql-cop',
+                            'impact': finding.get('impact'),
+                            'raw_result': finding,
+                            'request': request,
+                            'response': response
+                        }
+                    }
+                    vulnerabilities.append(vulnerability)
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse GraphQL Cop JSON output. Raw output: {stdout}")
+
+        return vulnerabilities
+
     def _run_nuclei_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
         """Run enhanced Nuclei scan with universal templates"""
         try:
@@ -1195,7 +1515,8 @@ requests:
                     '-severity', 'info,low,medium,high,critical',
                     '-timeout', '15',
                     '-rate-limit', '100',
-                    '-c', '20'
+                    '-c', '20',
+                    '-proxy', self.zap_api_url
                 ]
                 
                 # Add authorization headers
@@ -1246,7 +1567,8 @@ requests:
                 '-silent',
                 '-severity', 'info,low,medium,high,critical',
                 '-timeout', '15',
-                '-rate-limit', '100'
+                '-rate-limit', '100',
+                '-proxy', self.zap_api_url
             ]
             
             logger.info(f"🔍 Running Nuclei with endpoint-specific template...")
@@ -1276,7 +1598,8 @@ requests:
                 '-severity', 'info,low,medium,high,critical',
                 '-timeout', '15',
                 '-rate-limit', '100',
-                '-c', '20'
+                '-c', '20',
+                '-proxy', self.zap_api_url
             ]
             
             # Add authorization headers
@@ -1743,6 +2066,8 @@ requests:
                         logger.info(f"   📄 Parsing line {i+1}: {result.get('info', {}).get('name', 'Unknown')}")
                         
                         # Extract vulnerability information
+                        matched_url = result.get('matched-at', '')
+                        request, response = self._get_request_response_from_zap(matched_url)
                         vulnerability = {
                             'name': result.get('info', {}).get('name', 'Unknown Vulnerability'),
                             'description': result.get('info', {}).get('description', ''),
@@ -1756,9 +2081,11 @@ requests:
                                 'tool': 'nuclei',
                                 'template_id': result.get('template-id', ''),
                                 'template_url': result.get('info', {}).get('reference', []),
-                                'matched_at': result.get('matched-at', ''),
+                                'matched_at': matched_url,
                                 'extracted_results': result.get('extracted-results', []),
-                                'raw_result': result
+                                'raw_result': result,
+                                'request': request,
+                                'response': response
                             }
                         }
                         

@@ -16,6 +16,9 @@ APIShield is a comprehensive, real-time API security monitoring and vulnerabilit
 - **SQLMap**: SQL injection detection and exploitation
 - **SSRFMap**: Server-Side Request Forgery testing
 - **XSStrike**: Advanced XSS detection and exploitation
+- **VulnAPI**: OpenAPI-driven API vulnerability scanning
+- **WuppieFuzz**: REST API Fuzzing for robustness testing
+- **GraphQL Cop**: Security auditing for GraphQL APIs
 
 ### 🎯 **Intelligent Scanning**
 - **Parameter Generation**: AI-powered parameter value generation for comprehensive testing
@@ -138,6 +141,9 @@ The setup scripts automatically:
    - SQLMap (from GitHub)
    - SSRFMap (from GitHub)
    - XSStrike (from GitHub)
+   - VulnAPI (latest version)
+   - WuppieFuzz (latest version)
+   - GraphQL Cop (from GitHub)
 4. **Create Python Virtual Environment** and install dependencies
 5. **Generate Configuration Files** with proper tool paths
 6. **Create Startup/Stop Scripts** for easy management
@@ -273,6 +279,18 @@ open http://localhost:5001
 - **Payload Generation**: Custom XSS vectors
 - **Filter Bypass**: WAF evasion techniques
 - **Context-Aware Testing**: DOM, reflected, stored XSS
+
+### **VulnAPI**
+- **OpenAPI-driven Scanning**: Uses your OpenAPI specification to perform targeted and context-aware security checks.
+- **General Vulnerability Detection**: Scans for a wide range of common API vulnerabilities and security misconfigurations.
+
+### **WuppieFuzz**
+- **API Fuzzing**: Sends a large volume of unexpected and malformed data to your API endpoints to uncover novel bugs, crashes, and potential security issues.
+- **Robustness Testing**: Helps ensure your API can gracefully handle unexpected input without crashing or revealing sensitive information.
+
+### **GraphQL Cop**
+- **Specialized GraphQL Testing**: Performs security checks for vulnerabilities specific to GraphQL APIs.
+- **DoS and Info Leak Detection**: Checks for issues like query complexity DoS attacks, disabled introspection, and information leakage through field suggestions.
 
 ## 🔒 **Security Features**
 

@@ -116,6 +116,9 @@ class Config:
     SSRFMAP_PATH = os.getenv('SSRFMAP_PATH', './SSRFmap/ssrfmap.py')  # Local installation
     XSSTRIKE_PATH = os.getenv('XSSTRIKE_PATH', '/Users/danxzero/Library/Python/3.9/bin/xsstrike')
     NUCLEI_PATH = os.getenv('NUCLEI_PATH', '/opt/homebrew/bin/nuclei')
+    VULNAPI_PATH = os.getenv('VULNAPI_PATH', 'vulnapi')  # Assuming it's in the PATH
+    WUPPIEFUZZ_PATH = os.getenv('WUPPIEFUZZ_PATH', 'wuppiefuzz')
+    GRAPHQL_COP_PATH = os.getenv('GRAPHQL_COP_PATH', 'graphql-cop.py')
     ZAP_PATH = os.getenv('ZAP_PATH', '/Applications/ZAP.app/Contents/Java/zap.sh')
     
     # Redis Configuration

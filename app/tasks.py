@@ -10,6 +10,7 @@ from app.models import Service, ApiVersion, Endpoint, Scan, Vulnerability, ScanT
 from app.utils.crawler import APIPortalCrawler
 from app.utils.placeholder import ParameterGenerator
 from app.utils.scanner import SecurityScanner
+from app.utils.ai_validator import AIValidator
 # from app.utils.slack_client import SlackNotifier  # Removed slack integration
 from app.config import Config
 import json
@@ -247,7 +248,9 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                     'method': endpoint.method,
                     'service_name': endpoint.service.name,
                     'parameters_schema': parameters_schema,
-                    'request_body_schema': request_body_schema
+                    'request_body_schema': request_body_schema,
+                    'service_id': endpoint.service.id,
+                    'api_version_id': endpoint.api_version_id
                 }
                 logger.info(f"✅ Endpoint data prepared: {endpoint_data['path']} ({endpoint_data['method']})")
                 
@@ -364,6 +367,12 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                         for i, vuln_data in enumerate(vulnerabilities):
                             logger.info(f"   📝 Processing vulnerability {i+1}: {vuln_data.get('name', 'Unknown')} ({vuln_data.get('severity', 'medium')})")
                             
+                            # AI Validation
+                            logger.info("🤖 Calling AI Validator...")
+                            ai_validator = AIValidator()
+                            validation_result = ai_validator.validate_vulnerability(vuln_data)
+                            logger.info(f"   🤖 AI Validation result: {validation_result}")
+
                             # Use the new duplicate prevention logic
                             vulnerability, is_new = Vulnerability.find_or_create_vulnerability(
                                 scan_id=scan.id,
@@ -377,7 +386,9 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                                 evidence=vuln_data.get('evidence', ''),
                                 tool_used=vuln_data.get('tool', 'unknown'),
                                 cvss_score=vuln_data.get('cvss_score'),
-                                risk_score=vuln_data.get('risk_score', 0.0)
+                                risk_score=vuln_data.get('risk_score', 0.0),
+                                ai_confidence=validation_result.get('confidence'),
+                                ai_analysis=validation_result.get('analysis')
                             )
                             
                             if is_new:

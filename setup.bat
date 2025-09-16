@@ -186,6 +186,32 @@ if not exist "%USERPROFILE%\.xsstrike" (
     echo [INFO] XSStrike already installed
 )
 
+REM Install VulnAPI
+echo [INFO] Installing VulnAPI...
+echo [WARNING] Please install VulnAPI manually from:
+echo [WARNING] https://github.com/cerberauth/vulnapi/releases
+echo [WARNING] Download the latest Windows release, extract it, and add the location of vulnapi.exe to your system's PATH.
+echo.
+
+REM Install WuppieFuzz
+echo [INFO] Installing WuppieFuzz...
+echo [WARNING] Please install WuppieFuzz manually from:
+echo [WARNING] https://github.com/TNO-S3/WuppieFuzz/releases
+echo [WARNING] Download the latest Windows release, extract it, and add the location of wuppiefuzz.exe to your system's PATH.
+echo.
+
+REM Install GraphQL Cop
+echo [INFO] Installing GraphQL Cop...
+if not exist "%USERPROFILE%\.graphql-cop" (
+    git clone https://github.com/dolevf/graphql-cop.git "%USERPROFILE%\.graphql-cop"
+    cd "%USERPROFILE%\.graphql-cop"
+    pip install -r requirements.txt
+    cd /d "%~dp0"
+    echo [SUCCESS] GraphQL Cop installed
+) else (
+    echo [INFO] GraphQL Cop already installed
+)
+
 REM Start Redis service
 echo [INFO] Starting Redis service...
 net start Redis
@@ -214,6 +240,9 @@ echo [INFO] Creating configuration file...
     echo     SQLMAP_PATH = os.environ.get^('SQLMAP_PATH'^) or r'%USERPROFILE%\.sqlmap\sqlmap.py'
     echo     SSRFMAP_PATH = os.environ.get^('SSRFMAP_PATH'^) or r'%USERPROFILE%\.ssrfmap\ssrfmap.py'
     echo     XSSTRIKE_PATH = os.environ.get^('XSSTRIKE_PATH'^) or r'%USERPROFILE%\.xsstrike\xsstrike.py'
+    echo     VULNAPI_PATH = os.environ.get^('VULNAPI_PATH'^) or 'vulnapi'
+    echo     WUPPIEFUZZ_PATH = os.environ.get^('WUPPIEFUZZ_PATH'^) or 'wuppiefuzz'
+    echo     GRAPHQL_COP_PATH = os.environ.get^('GRAPHQL_COP_PATH'^) or r'%USERPROFILE%\.graphql-cop\graphql-cop.py'
     echo.
     echo     # Celery Configuration
     echo     CELERY_BROKER_URL = os.environ.get^('CELERY_BROKER_URL'^) or 'redis://localhost:6379/0'
@@ -267,6 +296,9 @@ echo [INFO] Creating environment file...
     echo SQLMAP_PATH=%%USERPROFILE%%\.sqlmap\sqlmap.py
     echo SSRFMAP_PATH=%%USERPROFILE%%\.ssrfmap\ssrfmap.py
     echo XSSTRIKE_PATH=%%USERPROFILE%%\.xsstrike\xsstrike.py
+    echo VULNAPI_PATH=vulnapi
+    echo WUPPIEFUZZ_PATH=wuppiefuzz
+    echo GRAPHQL_COP_PATH=%%USERPROFILE%%\.graphql-cop\graphql-cop.py
     echo.
     echo # Celery Configuration
     echo CELERY_BROKER_URL=redis://localhost:6379/0

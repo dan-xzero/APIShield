@@ -280,6 +280,85 @@ install_xsstrike() {
     print_success "XSStrike installed successfully"
 }
 
+# Function to install VulnAPI
+install_vulnapi() {
+    print_status "Installing VulnAPI..."
+
+    case $OS in
+        "macos")
+            brew install cerberauth/tap/vulnapi
+            ;;
+        "ubuntu"|"debian"|"centos"|"rhel"|"fedora")
+            VULNAPI_VERSION=$(curl -s https://api.github.com/repos/cerberauth/vulnapi/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+            VULNAPI_URL="https://github.com/cerberauth/vulnapi/releases/download/${VULNAPI_VERSION}/vulnapi_${VULNAPI_VERSION:1}_linux_amd64.tar.gz"
+
+            curl -L -o /tmp/vulnapi.tar.gz "$VULNAPI_URL"
+            sudo tar -xzf /tmp/vulnapi.tar.gz -C /usr/local/bin vulnapi
+            sudo chmod +x /usr/local/bin/vulnapi
+            rm /tmp/vulnapi.tar.gz
+            ;;
+        "windows")
+            print_warning "Please install VulnAPI manually from:"
+            print_warning "https://github.com/cerberauth/vulnapi/releases"
+            return 0
+            ;;
+    esac
+
+    print_success "VulnAPI installed successfully"
+}
+
+# Function to install WuppieFuzz
+install_wuppiefuzz() {
+    print_status "Installing WuppieFuzz..."
+
+    WUPPIEFUZZ_VERSION=$(curl -s https://api.github.com/repos/TNO-S3/WuppieFuzz/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    case $OS in
+        "macos")
+            WUPPIEFUZZ_URL="https://github.com/TNO-S3/WuppieFuzz/releases/download/${WUPPIEFUZZ_VERSION}/wuppiefuzz-x86_64-apple-darwin.tar.gz"
+            ;;
+        "ubuntu"|"debian"|"centos"|"rhel"|"fedora")
+            WUPPIEFUZZ_URL="https://github.com/TNO-S3/WuppieFuzz/releases/download/${WUPPIEFUZZ_VERSION}/wuppiefuzz-x86_64-unknown-linux-musl.tar.gz"
+            ;;
+        "windows")
+            print_warning "Please install WuppieFuzz manually from:"
+            print_warning "https://github.com/TNO-S3/WuppieFuzz/releases"
+            return 0
+            ;;
+    esac
+
+    curl -L -o /tmp/wuppiefuzz.tar.gz "$WUPPIEFUZZ_URL"
+    sudo tar -xzf /tmp/wuppiefuzz.tar.gz -C /usr/local/bin wuppiefuzz
+    sudo chmod +x /usr/local/bin/wuppiefuzz
+    rm /tmp/wuppiefuzz.tar.gz
+
+    print_success "WuppieFuzz installed successfully"
+}
+
+# Function to install GraphQL Cop
+install_graphql_cop() {
+    print_status "Installing GraphQL Cop..."
+
+    GRAPHQL_COP_DIR="$HOME/.graphql-cop"
+
+    if [ ! -d "$GRAPHQL_COP_DIR" ]; then
+        git clone https://github.com/dolevf/graphql-cop.git "$GRAPHQL_COP_DIR"
+    else
+        cd "$GRAPHQL_COP_DIR"
+        git pull origin main
+        cd - > /dev/null
+    fi
+
+    # Install its dependencies into the main venv
+    source venv/bin/activate
+    pip install -r "$GRAPHQL_COP_DIR/requirements.txt"
+
+    # Create symlink
+    sudo ln -sf "$GRAPHQL_COP_DIR/graphql-cop.py" /usr/local/bin/graphql-cop
+
+    print_success "GraphQL Cop installed successfully"
+}
+
 # Function to install Redis
 install_redis() {
     print_status "Installing Redis..."
@@ -680,6 +759,9 @@ main() {
     install_sqlmap
     install_ssrfmap
     install_xsstrike
+    install_vulnapi
+    install_wuppiefuzz
+    install_graphql_cop
     
     # Install Redis
     install_redis
