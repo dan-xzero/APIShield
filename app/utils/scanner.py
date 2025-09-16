@@ -10,6 +10,7 @@ import time
 import tempfile
 import os
 import uuid
+import re
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, quote
@@ -361,7 +362,7 @@ class SecurityScanner:
                     '--os', 'linux,windows',  # Test multiple OS
                     '--hpp',  # HTTP Parameter Pollution
                     '--fresh-queries',  # Don't use cached queries
-                    '--cleanup'  # Clean up temporary files
+                    '--verbose'  # Enable verbose output for debugging
                 ]
                 
                 # Add custom headers if needed
@@ -1210,6 +1211,21 @@ requests:
             logger.warning(f"Universal templates scan failed: {e}")
             return []
     
+    def _process_template_with_env_vars(self, template_content: str) -> str:
+        """Process template content and replace environment variable placeholders"""
+        # Replace API_AUTHORIZATION_HEADER placeholder with actual value
+        if '{{API_AUTHORIZATION_HEADER}}' in template_content:
+            auth_header = Config.API_AUTHORIZATION_HEADER
+            if auth_header:
+                template_content = template_content.replace('{{API_AUTHORIZATION_HEADER}}', auth_header)
+                logger.debug("✅ Replaced API_AUTHORIZATION_HEADER placeholder with environment variable")
+            else:
+                logger.warning("⚠️  API_AUTHORIZATION_HEADER environment variable not set")
+                # Remove the authorization header line if no value is available
+                template_content = re.sub(r'\s*Authorization: Basic \{\{API_AUTHORIZATION_HEADER\}\}\n?', '', template_content)
+        
+        return template_content
+
     def _run_nuclei_with_endpoint_template(self, endpoint: Dict, param_values: Dict, target_url: str, auth_headers: Dict) -> List[Dict]:
         """Run Nuclei with endpoint-specific template"""
         try:
@@ -1715,7 +1731,8 @@ requests:
         vulnerabilities = []
         
         logger.info(f"🔍 Parsing Nuclei output...")
-        logger.info(f"   Raw stdout lines: {len(stdout.strip().split('\n')) if stdout.strip() else 0}")
+        newline = '\n'
+        logger.info(f"   Raw stdout lines: {len(stdout.strip().split(newline)) if stdout.strip() else 0}")
         
         try:
             # Nuclei outputs one JSON object per line

@@ -1,0 +1,51 @@
+id: endpoint-f2a2a25f
+info:
+  author: APIShield
+  description: Security scan for POST /inventory-units/barcode/{barcode}/locations/{locationId}/return-restocked
+  name: Endpoint Scan - POST /inventory-units/barcode/{barcode}/locations/{locationId}/return-restocked
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"barcode": "- For barcode: 5901234123457", "locationId": 12345, "request_body":
+    {"returnReason": "Defective Product", "quantityReturned": 5, "returnComments":
+    "Product was damaged upon arrival", "returnerName": "John Doe", "returnerEmail":
+    "johndoe@example.com", "returnerPhone": "123-456-7890", "returnerAddress": {"street":
+    "123 Main St", "city": "Anytown", "state": "CA", "postalCode": "12345", "country":
+    "USA"}, "returnDate": "2022-10-15T08:00:00Z"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/inventory-units/barcode/{barcode}/locations/{locationId}/return-restocked'

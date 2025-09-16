@@ -1,0 +1,48 @@
+id: endpoint-6801cad7
+info:
+  author: APIShield
+  description: Security scan for POST /shipments/cancel-shipment
+  name: Endpoint Scan - POST /shipments/cancel-shipment
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"carrier": "UPS", "request_body": {"shipmentId": "SH123456789", "reason":
+    "Customer requested cancellation", "comments": "Customer changed mind about the
+    order", "securityToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/shipments/cancel-shipment'

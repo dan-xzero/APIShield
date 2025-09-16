@@ -1,0 +1,49 @@
+id: endpoint-a21c9cc4
+info:
+  author: APIShield
+  description: Security scan for POST /refurbishment/refurbishment-order
+  name: Endpoint Scan - POST /refurbishment/refurbishment-order
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"file": "https://example.com/refurbishment-order-file",
+    "requestBody": {"orderId": "12345", "customerName": "John Doe", "address": "123
+    Main St", "items": [{"itemId": "789", "itemName": "Furniture set", "quantity":
+    2}, {"itemId": "456", "itemName": "Lamp", "quantity": 1}]}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/refurbishment/refurbishment-order'

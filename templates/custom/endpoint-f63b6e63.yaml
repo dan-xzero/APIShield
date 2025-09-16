@@ -16,7 +16,7 @@ requests:
     "height": 6}}}}'
   headers:
     Accept: application/json
-    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
     Content-Type: application/json
   matchers:
   - condition: or

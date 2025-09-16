@@ -1,0 +1,48 @@
+id: endpoint-dda9dc21
+info:
+  author: APIShield
+  description: Security scan for POST /zip-code-carrier-mappings/sort-codes/remove
+  name: Endpoint Scan - POST /zip-code-carrier-mappings/sort-codes/remove
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"sortCode": "109283", "carrierCode": "FEDEX", "zipCode":
+    "90210", "country": "US", "active": true, "lastUpdatedBy": "admin", "timestamp":
+    "2022-09-15T14:30:00Z"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/zip-code-carrier-mappings/sort-codes/remove'

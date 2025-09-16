@@ -1,0 +1,49 @@
+id: endpoint-c5c9a202
+info:
+  author: APIShield
+  description: Security scan for PUT /inventory-lot-milestone-target-config
+  name: Endpoint Scan - PUT /inventory-lot-milestone-target-config
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"request_body": [{"items": {"lotId": "ABC123", "milestoneId": 456, "targetConfig":
+    {"targetDate": "2022-12-31", "targetQuantity": 1000}}}, {"items": {"lotId": "DEF456",
+    "milestoneId": 789, "targetConfig": {"targetDate": "2023-01-15", "targetQuantity":
+    500}}}]}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/inventory-lot-milestone-target-config'

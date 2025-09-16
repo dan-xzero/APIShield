@@ -1,0 +1,50 @@
+id: endpoint-6b7c23cd
+info:
+  author: APIShield
+  description: Security scan for POST /inventory-units/payment
+  name: Endpoint Scan - POST /inventory-units/payment
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"transactionId": "1234567890", "paymentMethod": "credit_card",
+    "totalAmount": 150.5, "currency": "USD", "items": [{"itemId": "ABC123", "quantity":
+    2}, {"itemId": "XYZ456", "quantity": 1}], "billingAddress": {"name": "John Doe",
+    "addressLine1": "123 Main St", "city": "New York", "state": "NY", "postalCode":
+    "10001", "country": "US"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/inventory-units/payment'

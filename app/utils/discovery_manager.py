@@ -127,10 +127,15 @@ class DiscoveryManager:
     
     def _scheduler_loop(self):
         """Main scheduler loop"""
+        logger.info("🔍 Discovery scheduler loop started")
         while self.running:
             try:
+                # Reload settings to get latest configuration
+                self._load_settings()
+                
                 # Check if discovery is enabled
                 if not self.settings.get('enabled', False):
+                    logger.debug("🔍 Discovery disabled, sleeping...")
                     time.sleep(60)  # Check every minute
                     continue
                 
@@ -138,8 +143,17 @@ class DiscoveryManager:
                 next_run = self.settings.get('next_run')
                 if next_run:
                     next_run_dt = datetime.fromisoformat(next_run)
-                    if datetime.now(timezone.utc) >= next_run_dt:
+                    current_time = datetime.now(timezone.utc)
+                    logger.debug(f"🔍 Checking discovery schedule: current={current_time}, next_run={next_run_dt}")
+                    
+                    if current_time >= next_run_dt:
+                        logger.info("🔍 Time to run discovery!")
                         self._run_discovery()
+                    else:
+                        logger.debug(f"🔍 Next discovery in {(next_run_dt - current_time).total_seconds()/60:.1f} minutes")
+                else:
+                    logger.warning("🔍 No next_run time set, running discovery now")
+                    self._run_discovery()
                 
                 # Sleep for a minute before checking again
                 time.sleep(60)
@@ -242,4 +256,14 @@ def start_discovery_scheduler():
 def stop_discovery_scheduler():
     """Stop the discovery scheduler"""
     discovery_manager.stop_scheduler()
+
+def restart_discovery_scheduler():
+    """Restart the discovery scheduler"""
+    discovery_manager.stop_scheduler()
+    time.sleep(2)  # Wait for thread to stop
+    discovery_manager.start_scheduler()
+
+def force_run_discovery():
+    """Force run discovery immediately"""
+    discovery_manager._run_discovery()
 

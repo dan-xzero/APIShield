@@ -1,0 +1,49 @@
+id: endpoint-3b6bc98e
+info:
+  author: APIShield
+  description: Security scan for PUT /purchase-orders
+  name: Endpoint Scan - PUT /purchase-orders
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"request_body": {"purchaseOrderId": "PO12345", "items": [{"itemId": "item001",
+    "quantity": 5, "unitPrice": 10.99}, {"itemId": "item002", "quantity": 10, "unitPrice":
+    25.75}], "totalAmount": 250.45, "shippingAddress": {"street": "123 Main Street",
+    "city": "Anytown", "state": "CA", "zipCode": "12345"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/purchase-orders'

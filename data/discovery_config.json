@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "interval": 30,
+  "sources": [
+    "ngrok",
+    "api_base"
+  ],
+  "last_run": "2025-09-14T21:15:34.558581+00:00",
+  "last_count": 0,
+  "last_status": "success",
+  "next_run": "2025-09-14T21:45:34.558581+00:00"
+}

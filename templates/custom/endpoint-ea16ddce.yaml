@@ -1,0 +1,47 @@
+id: endpoint-ea16ddce
+info:
+  author: APIShield
+  description: Security scan for PUT /inventory-bulk-adjustment/3p
+  name: Endpoint Scan - PUT /inventory-bulk-adjustment/3p
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"request_body": {"adjustmentType": "increase", "adjustmentReason": "Restocking",
+    "units": [{"sku": "ABC123", "quantity": 100}, {"sku": "XYZ456", "quantity": 50}]}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/inventory-bulk-adjustment/3p'

@@ -1,0 +1,49 @@
+id: endpoint-fcda2f1c
+info:
+  author: APIShield
+  description: Security scan for PUT /external/v1/asn/{asnId}/tracking
+  name: Endpoint Scan - PUT /external/v1/asn/{asnId}/tracking
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"asnId": "For asnId: 1234567890", "request_body": {"asnId": "12345", "trackingNumber":
+    "SH987654321", "carrier": "UPS", "estimatedDeliveryDate": "2022-12-31", "status":
+    "In Transit", "location": {"latitude": 37.7749, "longitude": -122.4194}, "notes":
+    "Deliver to front desk", "securityToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/external/v1/asn/{asnId}/tracking'

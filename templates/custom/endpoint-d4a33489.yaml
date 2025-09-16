@@ -1,0 +1,50 @@
+id: endpoint-d4a33489
+info:
+  author: APIShield
+  description: Security scan for POST /inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}
+  name: Endpoint Scan - POST /inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"inventoryItemId": 12345, "locationId": 12345, "inventoryLotId": 12345,
+    "request_body": {"actionType": "ADD", "quantity": 100, "expirationDate": "2023-12-31",
+    "notes": "Received new batch for restocking", "location": {"id": "12345", "name":
+    "Warehouse A"}, "lot": {"id": "67890", "number": "LOT123", "manufactureDate":
+    "2023-01-15"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}'

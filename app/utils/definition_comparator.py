@@ -265,31 +265,38 @@ class APIDefinitionComparator:
             # Trigger scans based on change types
             scan_types = self._determine_scan_types(results['comparison_result'])
             
+            # Get all endpoints for this service
+            endpoints = Endpoint.query.filter_by(service_id=service_id).all()
+            
+            if not endpoints:
+                logger.warning(f"No endpoints found for service {service.name}")
+                return results
+            
             for scan_type in scan_types:
-                try:
-                    # Create scan record
-                    scan = Scan(
-                        service_id=service_id,
-                        scan_type=scan_type,
-                        status='pending',
-                        triggered_by='definition_change',
-                        trigger_reason=f"API definition changes detected: {', '.join(results['comparison_result']['change_types'])}"
-                    )
-                    db.session.add(scan)
-                    db.session.flush()
-                    
-                    # Queue the scan task (import here to avoid circular import)
-                    from app.tasks import scan_service_task
-                    task = scan_service_task.delay(service_id, scan_type)
-                    scan.celery_task_id = task.id
-                    
-                    results['scans_triggered'] += 1
-                    results['scan_ids'].append(scan.id)
-                    
-                    logger.info(f"Triggered {scan_type} scan for service {service.name} (Scan ID: {scan.id})")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to trigger {scan_type} scan for service {service.name}: {e}")
+                for endpoint in endpoints:
+                    try:
+                        # Create scan record for each endpoint
+                        scan = Scan(
+                            endpoint_id=endpoint.id,
+                            scan_type=scan_type,
+                            status='pending',
+                            scan_time=datetime.now(timezone.utc)
+                        )
+                        db.session.add(scan)
+                        db.session.flush()
+                        
+                        # Queue the scan task (import here to avoid circular import)
+                        from app.tasks import scan_endpoint
+                        task = scan_endpoint.delay(scan.id, {'tools': ['zap', 'nuclei'], 'auto_triggered': True})
+                        scan.celery_task_id = task.id
+                        
+                        results['scans_triggered'] += 1
+                        results['scan_ids'].append(scan.id)
+                        
+                        logger.info(f"Triggered {scan_type} scan for endpoint {endpoint.path} ({endpoint.method}) in service {service.name} (Scan ID: {scan.id})")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to trigger {scan_type} scan for endpoint {endpoint.path} in service {service.name}: {e}")
             
             # Commit scan records
             db.session.commit()

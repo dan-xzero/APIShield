@@ -1,0 +1,48 @@
+id: endpoint-83147383
+info:
+  author: APIShield
+  description: Security scan for POST /invoice/forward-shipment/persist-actual-cost
+  name: Endpoint Scan - POST /invoice/forward-shipment/persist-actual-cost
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"shipmentId": "SH123456", "actualCost": 125.75, "currency":
+    "USD", "additionalDetails": {"description": "Additional shipping charges for expedited
+    delivery", "notes": "Urgent delivery required for customer order #7890"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/invoice/forward-shipment/persist-actual-cost'

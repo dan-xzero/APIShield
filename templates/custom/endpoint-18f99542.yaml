@@ -1,0 +1,45 @@
+id: endpoint-18f99542
+info:
+  author: APIShield
+  description: Security scan for GET /inventory-units/read-only
+  name: Endpoint Scan - GET /inventory-units/read-only
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - get
+requests:
+- headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: GET
+  path:
+  - '{{BaseURL}}/inventory-units/read-only'

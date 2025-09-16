@@ -1,0 +1,48 @@
+id: endpoint-14f2c2ee
+info:
+  author: APIShield
+  description: Security scan for POST /api/items
+  name: Endpoint Scan - POST /api/items
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"productId": "ABC123", "hsnCode": "123456", "countryOfOrigin":
+    "USA", "description": "This is a product description", "weight": 1.5, "dimensions":
+    {"length": 10, "width": 5, "height": 3}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/api/items'

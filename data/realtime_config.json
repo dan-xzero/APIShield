@@ -1,0 +1,13 @@
+{
+  "check_interval": 108000,
+  "auto_scan_enabled": true,
+  "scan_tools": [
+    "zap",
+    "nuclei",
+    "sqlmap",
+    "ssrfmap"
+  ],
+  "scan_depth": "comprehensive",
+  "change_threshold": 0.1,
+  "last_updated": "2025-09-11T12:07:42.730922+00:00"
+}

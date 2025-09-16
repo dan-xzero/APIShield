@@ -1,0 +1,49 @@
+id: endpoint-8269c2de
+info:
+  author: APIShield
+  description: Security scan for POST /report-requests
+  name: Endpoint Scan - POST /report-requests
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"reportName": "Sales Report", "startDate": "2022-01-01",
+    "endDate": "2022-01-31", "format": "PDF", "emailRecipients": ["john.doe@example.com",
+    "jane.smith@example.com"], "permissions": ["view", "download"], "filters": {"region":
+    "North America", "productCategory": "Electronics"}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/report-requests'

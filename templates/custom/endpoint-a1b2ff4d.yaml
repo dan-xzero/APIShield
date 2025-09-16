@@ -14,7 +14,7 @@ requests:
     "state": "CA", "zipCode": "12345", "country": "USA"}, "active": true}}'
   headers:
     Accept: application/json
-    Authorization: Basic aW5mcmFAb25lcXVpbmNlLmNvbTpMYXN0LWRldmFwaTEh
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
     Content-Type: application/json
   matchers:
   - condition: or

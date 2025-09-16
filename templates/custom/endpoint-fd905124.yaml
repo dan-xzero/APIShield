@@ -1,0 +1,50 @@
+id: endpoint-fd905124
+info:
+  author: APIShield
+  description: Security scan for POST /inventory-units/item/{restockedInventoryItemId}/locations/{locationId}/lots/{sourceLotId}/return-incorrect-product-restocked
+  name: Endpoint Scan - POST /inventory-units/item/{restockedInventoryItemId}/locations/{locationId}/lots/{sourceLotId}/return-incorrect-product-restocked
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"restockedInventoryItemId": 12345, "locationId": 12345, "sourceLotId": 12345,
+    "request_body": {"inventoryItemId": "ABC123", "locationId": 9876, "sourceLotId":
+    "XYZ789", "returnReason": "Incorrect product", "returnQuantity": 5, "returnedBy":
+    "John Doe", "returnDate": "2022-09-15", "comments": "Product found damaged upon
+    inspection"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/inventory-units/item/{restockedInventoryItemId}/locations/{locationId}/lots/{sourceLotId}/return-incorrect-product-restocked'

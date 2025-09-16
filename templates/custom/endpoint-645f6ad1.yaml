@@ -1,0 +1,48 @@
+id: endpoint-645f6ad1
+info:
+  author: APIShield
+  description: Security scan for POST /invoice/delay-invoice-email
+  name: Endpoint Scan - POST /invoice/delay-invoice-email
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"request_body": {"invoiceId": "INV12345", "email": "john.doe@example.com",
+    "reason": "Delay in processing", "additionalInformation": "Please delay sending
+    the invoice email due to a system upgrade.", "apiKey": "abc123xyz456"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/invoice/delay-invoice-email'

@@ -1,0 +1,50 @@
+id: endpoint-4a0899b8
+info:
+  author: APIShield
+  description: Security scan for POST /inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}
+  name: Endpoint Scan - POST /inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"inventoryItemId": 12345, "locationId": 12345, "inventoryLotId": 12345,
+    "request_body": {"actionType": "add", "quantity": 100, "reason": "Restocking inventory",
+    "user": {"userId": "123456", "username": "john_doe", "role": "admin"}, "timestamp":
+    "2022-03-15T10:00:00Z", "locationId": "warehouse_1", "inventoryItemId": "item_12345",
+    "inventoryLotId": "lot_6789"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/inventory-units/item/{inventoryItemId}/locations/{locationId}/lots/{inventoryLotId}'

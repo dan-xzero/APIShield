@@ -65,7 +65,7 @@ class APISecurityFramework:
                 
                 update_realtime_config(
                     check_interval=30,  # Check every 30 seconds
-                    auto_scan_enabled=False,  # Start disabled
+                    auto_scan_enabled=True,  # Start disabled
                     scan_tools=['zap', 'nuclei', 'sqlmap', 'ssrfmap'],
                     scan_depth='comprehensive',
                     change_threshold=0.1  # 10% change threshold

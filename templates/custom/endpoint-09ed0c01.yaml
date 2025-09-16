@@ -1,0 +1,51 @@
+id: endpoint-09ed0c01
+info:
+  author: APIShield
+  description: Security scan for POST /shipments/create-shipment
+  name: Endpoint Scan - POST /shipments/create-shipment
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"trackingNumber": "JTRN-987654321-KLMP", "addressValidationNeeded": true,
+    "request_body": {"sender_name": "John Doe", "sender_address": "123 Main St", "sender_city":
+    "Anytown", "sender_state": "CA", "sender_zipcode": "12345", "recipient_name":
+    "Jane Smith", "recipient_address": "456 Elm St", "recipient_city": "Othertown",
+    "recipient_state": "NY", "recipient_zipcode": "54321", "package_weight": 5.2,
+    "package_type": "Box", "shipping_method": "Priority", "insurance_required": true}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/shipments/create-shipment'

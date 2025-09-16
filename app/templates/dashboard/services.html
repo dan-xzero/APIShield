@@ -29,7 +29,7 @@
                                     <strong>Auto Discovery Status:</strong>
                                     {% if discovery_settings.enabled %}
                                         <span class="badge bg-success">Enabled</span>
-                                        <span class="text-muted ms-2">Runs every {{ discovery_settings.interval }} hours</span>
+                                        <span class="text-muted ms-2">Runs every {{ discovery_settings.interval|format_interval }}</span>
                                     {% else %}
                                         <span class="badge bg-warning">Disabled</span>
                                     {% endif %}
@@ -265,10 +265,10 @@
                             <label for="discoveryInterval" class="form-label">Discovery Interval</label>
                             <select class="form-select" id="discoveryInterval">
                                 <option value="30">Every 30 minutes</option>
-                                <option value="60" selected>Every hour</option>
+                                <option value="60" selected>Every 1 hour</option>
                                 <option value="120">Every 2 hours</option>
                                 <option value="360">Every 6 hours</option>
-                                <option value="1440">Daily</option>
+                                <option value="1440">Every 1 day</option>
                             </select>
                         </div>
                         <div class="mb-3">

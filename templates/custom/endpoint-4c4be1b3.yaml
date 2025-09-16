@@ -1,0 +1,51 @@
+id: endpoint-4c4be1b3
+info:
+  author: APIShield
+  description: Security scan for POST /api/carrier/update/config
+  name: Endpoint Scan - POST /api/carrier/update/config
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - post
+requests:
+- body: '{"vendorCode": "vendorCode: VENDOR1234-SUPPLIER5678-KPQW9012", "carrier":
+    "FEDEX-1234-A1B2", "carrierType": "For carrierType: FedEx", "request_body": {"config":
+    {"apiKey": "your_api_key_here", "secretKey": "your_secret_key_here", "endpoint":
+    "https://api.example.com", "timeout": 30, "maxRetries": 3, "headers": {"Content-Type":
+    "application/json", "Authorization": "Bearer your_token_here"}, "sslVerification":
+    true}}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: POST
+  path:
+  - '{{BaseURL}}/api/carrier/update/config'

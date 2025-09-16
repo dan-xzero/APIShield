@@ -82,6 +82,43 @@ def create_app(config_name=None):
         except Exception:
             return f'Invalid cron expression ({cron_expression})'
     
+    @app.template_filter('format_interval')
+    def format_interval_filter(minutes):
+        """Convert minutes to human-readable interval format"""
+        if minutes is None:
+            return 'Not set'
+        
+        minutes = int(minutes)
+        
+        if minutes >= 1440:  # 24 hours
+            days = minutes // 1440
+            return f'{days} day{"s" if days != 1 else ""}'
+        elif minutes >= 60:  # 1 hour
+            hours = minutes // 60
+            return f'{hours} hour{"s" if hours != 1 else ""}'
+        else:
+            return f'{minutes} minute{"s" if minutes != 1 else ""}'
+    
+    @app.template_filter('format_seconds')
+    def format_seconds_filter(seconds):
+        """Convert seconds to human-readable format"""
+        if seconds is None:
+            return 'Not set'
+        
+        seconds = int(seconds)
+        
+        if seconds >= 86400:  # 24 hours
+            days = seconds // 86400
+            return f'{days} day{"s" if days != 1 else ""}'
+        elif seconds >= 3600:  # 1 hour
+            hours = seconds // 3600
+            return f'{hours} hour{"s" if hours != 1 else ""}'
+        elif seconds >= 60:  # 1 minute
+            minutes = seconds // 60
+            return f'{minutes} minute{"s" if minutes != 1 else ""}'
+        else:
+            return f'{seconds} second{"s" if seconds != 1 else ""}'
+    
     # Create database tables
     with app.app_context():
         db.create_all()

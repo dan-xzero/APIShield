@@ -1,0 +1,48 @@
+id: endpoint-705798f1
+info:
+  author: APIShield
+  description: Security scan for PUT /locations/{locationId}/update-location-inventory-status
+  name: Endpoint Scan - PUT /locations/{locationId}/update-location-inventory-status
+  severity: info
+  tags:
+  - api
+  - endpoint
+  - put
+requests:
+- body: '{"locationId": 12345, "request_body": {"locationId": "12345", "inventoryStatus":
+    "IN_STOCK", "availability": 100, "lastUpdatedBy": "api_user", "updateReason":
+    "Restocking inventory", "securityToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MzMyNzYzMTYsInVzZXJuYW1lIjoiYXBpX3VzZXIifQ.XFQZ3_q9RtTY5H9Kd5t2u0KWJvM55qDGjDw5cTl9jJ4"}}'
+  headers:
+    Accept: application/json
+    Authorization: Basic {{API_AUTHORIZATION_HEADER}}
+    Content-Type: application/json
+  matchers:
+  - condition: or
+    part: body
+    type: word
+    words:
+    - error
+    - exception
+    - sql
+    - mysql
+    - postgresql
+    - oracle
+    - syntax error
+    - stack trace
+  - condition: or
+    status:
+    - 500
+    - 502
+    - 503
+    - 504
+    type: status
+  - condition: or
+    part: body
+    regex:
+    - (?i)(sql|mysql|postgresql|oracle).*error
+    - (?i)(syntax|parse).*error
+    type: regex
+  matchers-condition: or
+  method: PUT
+  path:
+  - '{{BaseURL}}/locations/{locationId}/update-location-inventory-status'
