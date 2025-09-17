@@ -11,9 +11,20 @@ import time
 import base64
 import hmac
 import hashlib
+import requests
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urljoin
 from app.config import Config
+
+# Try to import PyJWT, fallback to manual JWT handling if not available
+try:
+    import jwt as pyjwt
+    PYJWT_AVAILABLE = True
+except ImportError:
+    pyjwt = None
+    PYJWT_AVAILABLE = False
+    logging.warning("PyJWT not available, using manual JWT handling")
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +33,12 @@ class JWTSecurityTester:
     
     def __init__(self):
         self.test_results = []
+        self.session = requests.Session()
         self.common_secrets = [
             'secret', 'password', '123456', 'admin', 'test',
             'jwt', 'token', 'key', 'secretkey', 'apikey',
-            'your-256-bit-secret', 'mysecret', 'supersecret'
+            'your-256-bit-secret', 'mysecret', 'supersecret',
+            'changeme', 'default', 'jwt-secret', 'api-secret'
         ]
     
     def test_jwt_vulnerabilities(self, endpoint: Dict, param_values: Dict, auth_headers: Dict) -> Dict:
@@ -119,40 +132,41 @@ class JWTSecurityTester:
             logger.warning(f"Failed to extract JWT token: {e}")
             return None
     
-    def _create_test_jwt_token(self) -> str:
+    def _create_test_jwt_token(self, secret: str = 'secret', algorithm: str = 'HS256') -> str:
         """Create a test JWT token for testing"""
         try:
-            # Create a simple test JWT token
-            header = {
-                "alg": "HS256",
-                "typ": "JWT"
-            }
-            
+            # Create a realistic test JWT token
             payload = {
                 "sub": "1234567890",
                 "name": "Test User",
+                "email": "test@example.com",
                 "iat": int(time.time()),
                 "exp": int(time.time()) + 3600,  # 1 hour from now
-                "role": "user"
+                "role": "user",
+                "permissions": ["read", "write"],
+                "iss": "api-security-scanner",
+                "aud": "api-users"
             }
             
-            # Encode header and payload
-            header_encoded = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
-            payload_encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')
-            
-            # Create signature with weak secret
-            message = f"{header_encoded}.{payload_encoded}"
-            signature = hmac.new(
-                b'secret',
-                message.encode(),
-                hashlib.sha256
-            ).digest()
-            signature_encoded = base64.urlsafe_b64encode(signature).decode().rstrip('=')
-            
-            return f"{header_encoded}.{payload_encoded}.{signature_encoded}"
+            # Use PyJWT library for proper token creation if available
+            if PYJWT_AVAILABLE and pyjwt:
+                token = pyjwt.encode(payload, secret, algorithm=algorithm)
+                return token
+            else:
+                # Fallback to manual creation
+                header = {"alg": algorithm, "typ": "JWT"}
+                header_encoded = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
+                payload_encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')
+                
+                message = f"{header_encoded}.{payload_encoded}"
+                signature = hmac.new(secret.encode(), message.encode(), hashlib.sha256).digest()
+                signature_encoded = base64.urlsafe_b64encode(signature).decode().rstrip('=')
+                
+                return f"{header_encoded}.{payload_encoded}.{signature_encoded}"
             
         except Exception as e:
             logger.warning(f"Failed to create test JWT token: {e}")
+            # Return a well-known test JWT token
             return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
     
     def _test_jwt_signature_bypass(self, jwt_token: str, endpoint: Dict, auth_headers: Dict) -> List[Dict]:
@@ -728,3 +742,91 @@ class JWTSecurityTester:
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'owasp_category': details.get('owasp_category', '')
         }
+    
+    def _modify_jwt_algorithm(self, jwt_token: str, new_algorithm: str) -> Optional[str]:
+        """Modify JWT token algorithm"""
+        try:
+            # Decode the token
+            parts = jwt_token.split('.')
+            if len(parts) != 3:
+                return None
+            
+            # Decode header
+            header = json.loads(base64.urlsafe_b64decode(parts[0] + '==').decode())
+            header['alg'] = new_algorithm
+            
+            # Re-encode header
+            header_encoded = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
+            
+            # For 'none' algorithm, remove signature
+            if new_algorithm.lower() == 'none':
+                return f"{header_encoded}.{parts[1]}."
+            else:
+                # Keep original signature for other algorithms
+                return f"{header_encoded}.{parts[1]}.{parts[2]}"
+                
+        except Exception as e:
+            logger.error(f"Failed to modify JWT algorithm: {e}")
+            return None
+    
+    def _test_jwt_token(self, jwt_token: str, endpoint: Dict, auth_headers: Dict) -> Optional[Dict]:
+        """Test JWT token by making API request"""
+        try:
+            # Build target URL
+            target_url = self._build_target_url(endpoint)
+            if not target_url:
+                return None
+            
+            # Create headers with JWT token
+            test_headers = auth_headers.copy()
+            test_headers['Authorization'] = f'Bearer {jwt_token}'
+            
+            # Make request
+            method = endpoint.get('method', 'GET').upper()
+            if method == 'GET':
+                response = self.session.get(target_url, headers=test_headers, timeout=30)
+            elif method == 'POST':
+                response = self.session.post(target_url, headers=test_headers, timeout=30)
+            else:
+                response = self.session.request(method, target_url, headers=test_headers, timeout=30)
+            
+            return {
+                'status_code': response.status_code,
+                'headers': dict(response.headers),
+                'body': response.text,
+                'url': target_url
+            }
+            
+        except Exception as e:
+            logger.error(f"JWT token test failed: {e}")
+            return None
+    
+    def _build_target_url(self, endpoint: Dict) -> Optional[str]:
+        """Build target URL for testing"""
+        try:
+            base_url = Config.API_BASE_URL.rstrip('/')
+            path = endpoint.get('path', '')
+            return f"{base_url}{path}"
+        except Exception as e:
+            logger.error(f"Failed to build target URL: {e}")
+            return None
+    
+    def _is_jwt_bypass_successful(self, response: Dict, test_case: Dict) -> bool:
+        """Check if JWT bypass was successful"""
+        if not response:
+            return False
+        
+        status_code = response.get('status_code', 0)
+        body = response.get('body', '').lower()
+        
+        # Consider bypass successful if:
+        # 1. Status code is 2xx (success)
+        # 2. Response doesn't contain authentication error indicators
+        auth_error_indicators = ['unauthorized', 'forbidden', 'invalid token', 'token expired', 'authentication failed']
+        
+        if 200 <= status_code < 300:
+            # Check that no authentication error indicators are present
+            if not any(indicator in body for indicator in auth_error_indicators):
+                return True
+        
+        return False

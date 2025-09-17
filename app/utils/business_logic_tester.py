@@ -10,8 +10,11 @@ import json
 import logging
 import time
 import uuid
+import requests
+import re
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse
 from app.config import Config
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,7 @@ class BusinessLogicTester:
     
     def __init__(self):
         self.test_results = []
+        self.session = requests.Session()
         self.test_categories = {
             'workflow_bypass': 'Workflow Bypass Tests',
             'state_manipulation': 'State Manipulation Tests',
@@ -119,28 +123,46 @@ class BusinessLogicTester:
         try:
             logger.info("🔍 Testing workflow bypass vulnerabilities...")
             
-            # Test 1: Step skipping
+            # Build target URL
+            target_url = self._build_target_url(endpoint, param_values)
+            if not target_url:
+                logger.warning("⚠️ Could not build target URL for workflow bypass testing")
+                return vulnerabilities
+            
+            # Test 1: Step skipping - try to skip workflow steps
             step_skip_tests = [
                 {'step': '1', 'status': 'completed', 'skip_validation': True},
                 {'step': '2', 'status': 'completed', 'skip_validation': True},
-                {'step': '3', 'status': 'completed', 'skip_validation': True}
+                {'step': '3', 'status': 'completed', 'skip_validation': True},
+                {'workflow_step': 'final', 'bypass_steps': True},
+                {'process_step': 'complete', 'skip_intermediate': True}
             ]
             
             for test_case in step_skip_tests:
-                vulnerability = self._create_vulnerability(
-                    name="Workflow Step Bypass",
-                    description="Potential workflow step bypass vulnerability",
-                    severity="high",
-                    category="workflow_bypass",
-                    evidence=f"Step {test_case['step']} bypass attempt",
-                    details={
-                        'test_type': 'workflow_bypass',
-                        'test_case': test_case,
-                        'endpoint': endpoint.get('path', ''),
-                        'method': endpoint.get('method', 'GET')
-                    }
-                )
-                vulnerabilities.append(vulnerability)
+                # Create test payload by modifying param_values
+                test_payload = param_values.copy()
+                test_payload.update(test_case)
+                
+                # Make actual API request
+                response = self._make_test_request(endpoint, test_payload, auth_headers)
+                
+                if response and self._is_workflow_bypass_successful(response, test_case):
+                    vulnerability = self._create_vulnerability(
+                        name="Workflow Step Bypass",
+                        description=f"Workflow step bypass vulnerability detected - step {test_case.get('step', 'unknown')} can be skipped",
+                        severity="high",
+                        category="workflow_bypass",
+                        evidence=f"Step {test_case.get('step', 'unknown')} bypass successful - HTTP {response.get('status_code', 'unknown')}",
+                        details={
+                            'test_type': 'workflow_bypass',
+                            'test_case': test_case,
+                            'endpoint': endpoint.get('path', ''),
+                            'method': endpoint.get('method', 'GET'),
+                            'response_status': response.get('status_code'),
+                            'response_body': response.get('body', '')[:500]  # Truncate large responses
+                        }
+                    )
+                    vulnerabilities.append(vulnerability)
             
             # Test 2: Status manipulation
             status_tests = [
@@ -660,3 +682,89 @@ class BusinessLogicTester:
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'owasp_category': details.get('owasp_category', '')
         }
+    
+    def _build_target_url(self, endpoint: Dict, param_values: Dict) -> Optional[str]:
+        """Build target URL for testing"""
+        try:
+            # Get base URL from config or endpoint
+            base_url = Config.API_BASE_URL.rstrip('/')
+            if endpoint.get('service_url'):
+                base_url = endpoint['service_url'].rstrip('/')
+            
+            # Get path and replace parameters
+            path = endpoint.get('path', '')
+            for param_name, param_value in param_values.items():
+                if f'{{{param_name}}}' in path:
+                    path = path.replace(f'{{{param_name}}}', str(param_value))
+            
+            return f"{base_url}{path}"
+        except Exception as e:
+            logger.error(f"Failed to build target URL: {e}")
+            return None
+    
+    def _make_test_request(self, endpoint: Dict, payload: Dict, auth_headers: Dict) -> Optional[Dict]:
+        """Make a test request to the endpoint"""
+        try:
+            target_url = self._build_target_url(endpoint, payload)
+            if not target_url:
+                return None
+            
+            method = endpoint.get('method', 'GET').upper()
+            
+            # Prepare request parameters
+            query_params = {}
+            request_body = None
+            
+            for key, value in payload.items():
+                if key == 'request_body':
+                    request_body = value
+                elif f'{{{key}}}' not in target_url:
+                    query_params[key] = value
+            
+            # Make the request
+            if method == 'GET':
+                response = self.session.get(target_url, params=query_params, headers=auth_headers, timeout=30)
+            elif method == 'POST':
+                response = self.session.post(target_url, params=query_params, json=request_body, headers=auth_headers, timeout=30)
+            elif method == 'PUT':
+                response = self.session.put(target_url, params=query_params, json=request_body, headers=auth_headers, timeout=30)
+            elif method == 'DELETE':
+                response = self.session.delete(target_url, params=query_params, headers=auth_headers, timeout=30)
+            else:
+                response = self.session.request(method, target_url, params=query_params, json=request_body, headers=auth_headers, timeout=30)
+            
+            return {
+                'status_code': response.status_code,
+                'headers': dict(response.headers),
+                'body': response.text,
+                'url': target_url
+            }
+            
+        except Exception as e:
+            logger.error(f"Test request failed: {e}")
+            return None
+    
+    def _is_workflow_bypass_successful(self, response: Dict, test_case: Dict) -> bool:
+        """Check if workflow bypass was successful"""
+        if not response:
+            return False
+        
+        status_code = response.get('status_code', 0)
+        body = response.get('body', '').lower()
+        
+        # Consider bypass successful if:
+        # 1. Status code is 2xx (success)
+        # 2. Response contains success indicators
+        # 3. Response doesn't contain error indicators
+        success_indicators = ['success', 'completed', 'approved', 'processed', 'accepted']
+        error_indicators = ['error', 'invalid', 'unauthorized', 'forbidden', 'failed']
+        
+        if 200 <= status_code < 300:
+            # Check for success indicators in response
+            if any(indicator in body for indicator in success_indicators):
+                return True
+            # Check that no error indicators are present
+            if not any(indicator in body for indicator in error_indicators):
+                return True
+        
+        return False

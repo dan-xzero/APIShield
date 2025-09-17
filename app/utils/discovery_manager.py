@@ -111,12 +111,29 @@ class DiscoveryManager:
     def start_scheduler(self):
         """Start the automatic discovery scheduler"""
         if self.running:
+            logger.info("🔍 Discovery scheduler is already running")
             return
+        
+        # Ensure settings are loaded before starting
+        self._load_settings()
+        
+        # If enabled but no next_run time is set, set it to run immediately
+        if self.settings.get('enabled', False) and not self.settings.get('next_run'):
+            logger.info("🔍 Discovery enabled but no next_run time set - scheduling immediate run")
+            self.settings['next_run'] = datetime.now(timezone.utc).isoformat()
+            self._save_settings()
         
         self.running = True
         self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.scheduler_thread.start()
-        logger.info("🔍 Automatic service discovery scheduler started")
+        
+        # Log current settings
+        if self.settings.get('enabled', False):
+            interval = self.settings.get('interval', 60)
+            next_run = self.settings.get('next_run', 'Not scheduled')
+            logger.info(f"🔍 Automatic service discovery scheduler started (interval: {interval} minutes, next run: {next_run})")
+        else:
+            logger.info("🔍 Automatic service discovery scheduler started but discovery is disabled")
     
     def stop_scheduler(self):
         """Stop the automatic discovery scheduler"""
@@ -152,8 +169,16 @@ class DiscoveryManager:
                     else:
                         logger.debug(f"🔍 Next discovery in {(next_run_dt - current_time).total_seconds()/60:.1f} minutes")
                 else:
-                    logger.warning("🔍 No next_run time set, running discovery now")
+                    # This should not happen if start_scheduler() is working correctly
+                    logger.warning("🔍 No next_run time set, running discovery now and setting next run time")
                     self._run_discovery()
+                    # Set next run time after discovery completes
+                    if self.settings.get('enabled', False):
+                        interval = self.settings.get('interval', 60)
+                        next_run = datetime.now(timezone.utc) + timedelta(minutes=interval)
+                        self.settings['next_run'] = next_run.isoformat()
+                        self._save_settings()
+                        logger.info(f"🔍 Next discovery scheduled for: {next_run}")
                 
                 # Sleep for a minute before checking again
                 time.sleep(60)

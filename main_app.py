@@ -169,9 +169,15 @@ class APISecurityFramework:
             logger.info("✅ AI description generator initialized")
             
             # Start discovery scheduler
-            from app.utils.discovery_manager import start_discovery_scheduler
-            start_discovery_scheduler()
-            logger.info("✅ Service discovery scheduler started")
+            from app.utils.discovery_manager import start_discovery_scheduler, get_discovery_settings, restart_discovery_scheduler
+            restart_discovery_scheduler()  # Use restart to ensure clean initialization
+            
+            # Log discovery settings
+            discovery_settings = get_discovery_settings()
+            if discovery_settings.get('enabled', False):
+                logger.info(f"✅ Service discovery scheduler started (interval: {discovery_settings.get('interval', 60)} minutes)")
+            else:
+                logger.info("ℹ️ Service discovery scheduler started but discovery is disabled")
             
         except Exception as e:
             logger.error(f"❌ AI components initialization failed: {e}")

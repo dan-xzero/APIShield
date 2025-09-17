@@ -30,11 +30,11 @@ class SecurityScanner:
         self.zap_api_key = zap_api_key or Config.ZAP_API_KEY
         self.session = requests.Session()
         
-        # External tool paths
-        self.sqlmap_path = Config.SQLMAP_PATH
-        self.ssrfmap_path = Config.SSRFMAP_PATH
-        self.xsstrike_path = Config.XSSTRIKE_PATH
-        self.nuclei_path = Config.NUCLEI_PATH
+        # External tool paths - use environment variables or defaults
+        self.sqlmap_path = os.getenv('SQLMAP_PATH', 'sqlmap')
+        self.ssrfmap_path = os.getenv('SSRFMAP_PATH', './SSRFmap/ssrfmap.py')
+        self.xsstrike_path = os.getenv('XSSTRIKE_PATH', 'xsstrike')
+        self.nuclei_path = os.getenv('NUCLEI_PATH', 'nuclei')
         
         # Template manager
         self.template_manager = APIShieldTemplateManager()
@@ -90,7 +90,7 @@ class SecurityScanner:
         """Get authorization headers for API requests"""
         return self.auth_headers.copy()
     
-    def scan_endpoint(self, endpoint: Dict, param_values: Dict, scan_type: str = 'combined') -> Dict:
+    def scan_endpoint(self, endpoint: Dict, param_values: Dict, scan_type: str = 'combined', scan_config: Dict = None) -> Dict:
         """
         Perform security scan on an endpoint
         
@@ -98,6 +98,7 @@ class SecurityScanner:
             endpoint: Endpoint information
             param_values: Parameter values to use
             scan_type: Type of scan (zap, sqlmap, ssrfmap, xsstrike, combined)
+            scan_config: Additional scan configuration including scope and target
             
         Returns:
             Scan results dictionary
@@ -105,8 +106,22 @@ class SecurityScanner:
         # Note: Scan notifications are handled by the calling task
         # to avoid duplicate notifications
         
+        # Extract scan scope and target from config
+        scan_scope = 'endpoint'  # Default to endpoint-level scanning
+        target_endpoint_id = None
+        
+        if scan_config:
+            scan_scope = scan_config.get('scan_scope', 'endpoint')
+            target_endpoint_id = scan_config.get('target_endpoint_id')
+        
+        logger.info(f"🔍 Starting {scan_scope}-level scan for endpoint: {endpoint.get('path', 'Unknown')}")
+        if target_endpoint_id:
+            logger.info(f"   Target endpoint ID: {target_endpoint_id}")
+        
         scan_results = {
             'scan_type': scan_type,
+            'scan_scope': scan_scope,
+            'target_endpoint_id': target_endpoint_id,
             'endpoint': endpoint,
             'param_values': param_values,
             'vulnerabilities': [],
@@ -121,7 +136,8 @@ class SecurityScanner:
         try:
             if scan_type in ['zap', 'combined']:
                 try:
-                    zap_results = self._run_zap_scan(endpoint, param_values)
+                    # Pass scan scope to ZAP scan
+                    zap_results = self._run_zap_scan(endpoint, param_values, scan_scope=scan_scope, target_endpoint_id=target_endpoint_id)
                     scan_results['vulnerabilities'].extend(zap_results.get('vulnerabilities', []))
                     scan_results['tools_used'].append('zap')
                     if zap_results.get('partial_scan'):
@@ -177,8 +193,7 @@ class SecurityScanner:
                 except Exception as e:
                     logger.warning(f"Business logic testing failed: {e}")
                     scan_results['tools_used'].append('business_logic_tester(failed)')
-            
-            if scan_type in ['enhanced', 'combined'] and Config.ENABLE_BUSINESS_LOGIC_TESTING:
+                
                 try:
                     jwt_results = self.jwt_security_tester.test_jwt_vulnerabilities(
                         endpoint, param_values, self.get_auth_headers()
@@ -218,13 +233,24 @@ class SecurityScanner:
         
         return scan_results
     
-    def _run_zap_scan(self, endpoint: Dict, param_values: Dict) -> Dict:
+    def _run_zap_scan(self, endpoint: Dict, param_values: Dict, scan_scope: str = 'endpoint', target_endpoint_id: str = None) -> Dict:
         """Run enhanced OWASP ZAP scan with max coverage playbook features"""
         try:
             # Check if ZAP is available
             if not self._check_zap_availability():
                 logger.warning("❌ ZAP not available, skipping scan")
                 return {'vulnerabilities': [], 'skipped': 'ZAP not available'}
+            
+            # Log scan scope for debugging
+            logger.info(f"🔍 ZAP scan scope: {scan_scope}")
+            if target_endpoint_id:
+                logger.info(f"   Target endpoint ID: {target_endpoint_id}")
+            
+            # For endpoint-level scans, we only scan the specific endpoint
+            if scan_scope == 'endpoint':
+                logger.info(f"🎯 Endpoint-level scan: focusing on {endpoint.get('path', 'Unknown')}")
+            else:
+                logger.info(f"🌐 Service-level scan: scanning entire service")
             
             # Build target URL
             target_url = self._build_target_url(endpoint, param_values)
@@ -549,7 +575,7 @@ Content-Length: 100
         
         try:
             logger.debug(f"🔍 Making ZAP API request to: {endpoint}")
-            response = self.session.get(url, params=params, timeout=30)
+            response = self.session.get(url, params=params, timeout=60)  # Increased timeout
             response.raise_for_status()
             
             result = response.json()

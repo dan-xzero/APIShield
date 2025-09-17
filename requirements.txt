@@ -21,6 +21,7 @@ urllib3==2.0.4
 # Security and cryptography
 bcrypt==4.0.1
 cryptography==41.0.4
+PyJWT==2.8.0
 
 # Data processing
 pandas==2.0.3

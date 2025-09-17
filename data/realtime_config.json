@@ -1,5 +1,5 @@
 {
-  "check_interval": 108000,
+  "check_interval": 30,
   "auto_scan_enabled": true,
   "scan_tools": [
     "zap",
@@ -9,5 +9,5 @@
   ],
   "scan_depth": "comprehensive",
   "change_threshold": 0.1,
-  "last_updated": "2025-09-11T12:07:42.730922+00:00"
+  "last_updated": "2025-09-17T09:10:01.631790+00:00"
 }

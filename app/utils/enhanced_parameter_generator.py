@@ -137,10 +137,13 @@ class EnhancedParameterGenerator:
             
             path = endpoint.path
             
-            # Replace path parameters
+            # Replace path parameters safely using regex
+            import re
             for param_name, param_value in param_values.items():
-                if param_name in path:
-                    path = path.replace(f'{{{param_name}}}', str(param_value))
+                # Use regex to match exact parameter placeholders
+                pattern = re.escape(f'{{{param_name}}}')
+                if re.search(pattern, path):
+                    path = re.sub(pattern, str(param_value), path)
             
             # Add query parameters
             query_params = {}
@@ -168,8 +171,8 @@ class EnhancedParameterGenerator:
             else:
                 response = self.session.request(method, url, params=query_params, json=request_body, timeout=30)
             
-            # Consider 2xx and 3xx responses as successful
-            success = 200 <= response.status_code < 400
+            # Consider only 2xx responses as successful (exclude 3xx redirects)
+            success = 200 <= response.status_code < 300
             
             return {
                 'success': success,
@@ -192,34 +195,36 @@ class EnhancedParameterGenerator:
     def _save_parameter_set(self, endpoint: Endpoint, param_values: Dict, validation_result: Dict):
         """Save successful parameter set to database"""
         try:
-            # Create parameter set name
-            name = f"Auto-generated {endpoint.method} {endpoint.path}"
-            if endpoint.summary:
-                name = f"{endpoint.summary} - {name}"
-            
-            # Extract request body
-            request_body = param_values.pop('request_body', None)
-            
-            # Create parameter set
-            param_set = ParameterSet(
-                endpoint_id=endpoint.id,
-                name=name,
-                description=f"Auto-generated parameter set for {endpoint.path}",
-                parameters=param_values,
-                request_body=request_body,
-                response_status=validation_result['status_code'],
-                response_body=validation_result['response_body'],
-                response_headers=validation_result['response_headers']
-            )
-            
-            db.session.add(param_set)
-            db.session.commit()
-            
-            logger.info(f"💾 Saved parameter set: {param_set.id}")
-            
+            # Use database transaction for atomicity
+            with db.session.begin():
+                # Create parameter set name
+                name = f"Auto-generated {endpoint.method} {endpoint.path}"
+                if endpoint.summary:
+                    name = f"{endpoint.summary} - {name}"
+                
+                # Extract request body
+                request_body = param_values.pop('request_body', None)
+                
+                # Create parameter set
+                param_set = ParameterSet(
+                    endpoint_id=endpoint.id,
+                    name=name,
+                    description=f"Auto-generated parameter set for {endpoint.path}",
+                    parameters=param_values,
+                    request_body=request_body,
+                    response_status=validation_result['status_code'],
+                    response_body=validation_result['response_body'],
+                    response_headers=validation_result['response_headers']
+                )
+                
+                db.session.add(param_set)
+                # Transaction will be committed automatically by the context manager
+                
+                logger.info(f"💾 Saved parameter set: {param_set.id}")
+                
         except Exception as e:
             logger.error(f"❌ Failed to save parameter set: {e}")
-            db.session.rollback()
+            # Transaction will be rolled back automatically by the context manager
     
     def _create_parameter_mutations(self, parameter_set: ParameterSet) -> List[Dict]:
         """Create parameter mutations for security testing"""

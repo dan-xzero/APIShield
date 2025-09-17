@@ -563,7 +563,7 @@ class RealTimeMonitor:
                                 logger.warning(f"Endpoint {endpoint_info['id']} not found in database")
                                 continue
                             
-                            # Create scan configuration
+                            # Create scan configuration for individual endpoint
                             scan_config = {
                                 'scan_depth': 'standard',  # Use 'standard' instead of 'comprehensive' for compatibility
                                 'timeout': 60,  # Use reasonable timeout like manual scans
@@ -572,7 +572,9 @@ class RealTimeMonitor:
                                 'save_parameters': True,
                                 'auto_triggered': True,
                                 'change_reason': change.get('change_type', 'unknown'),
-                                'change_details': f"Endpoint {endpoint.path} ({endpoint.method}) - {change.get('change_type', 'unknown')}"
+                                'change_details': f"Endpoint {endpoint.path} ({endpoint.method}) - {change.get('change_type', 'unknown')}",
+                                'target_endpoint_id': endpoint.id,  # Explicitly specify this is for a single endpoint
+                                'scan_scope': 'endpoint'  # Make it clear this is endpoint-level scanning
                             }
                             
                             # Validate scan config

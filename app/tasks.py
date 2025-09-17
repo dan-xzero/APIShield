@@ -270,6 +270,12 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                 tools_to_use = scan_config_dict.get('tools', ['zap', 'nuclei'])
                 logger.info(f"🔍 Starting security scan with tools: {tools_to_use}")
                 
+                # Log scan configuration for debugging
+                logger.info(f"🔧 Scan configuration: {scan_config_dict}")
+                scan_scope = scan_config_dict.get('scan_scope', 'endpoint')
+                target_endpoint_id = scan_config_dict.get('target_endpoint_id')
+                logger.info(f"🎯 Scan scope: {scan_scope}, Target endpoint ID: {target_endpoint_id}")
+                
                 # Send scan started notification
                 try:
                     from app.utils.slack_notifier import slack_notifier
@@ -314,7 +320,7 @@ def scan_endpoint(self, scan_id: str, scan_config: dict = None):
                         tool_config['timeout'] = min(scan_timeout, 120)  # Cap at 120 seconds per tool
                         
                         if tool == 'zap':
-                            tool_results = scanner._run_zap_scan(endpoint_data, param_values)
+                            tool_results = scanner._run_zap_scan(endpoint_data, param_values, scan_scope=scan_scope, target_endpoint_id=target_endpoint_id)
                         elif tool == 'nuclei':
                             tool_results = scanner._run_nuclei_scan(endpoint_data, param_values)
                         elif tool == 'sqlmap':
@@ -637,10 +643,11 @@ def cleanup_stuck_scans(self):
             for scan in stuck_scans:
                 try:
                     def mark_failed_operation():
-                        scan.status = 'failed'
-                        scan.completed_at = datetime.now(timezone.utc)
-                        scan.duration = 0
-                        db.session.commit()
+                        with db.session.begin():
+                            scan.status = 'failed'
+                            scan.completed_at = datetime.now(timezone.utc)
+                            scan.duration = 0
+                            # Transaction will be committed automatically
                         return True
                     
                     safe_db_operation(mark_failed_operation)

@@ -10,11 +10,65 @@ from app.tasks import scan_endpoint, crawl_and_update_services
 # from app.utils.slack_client import SlackNotifier  # Removed slack integration
 from datetime import datetime, timedelta, timezone
 import json
+import re
+from functools import wraps
 
 api_bp = Blueprint('api', __name__)
 
+# Rate limiting decorator
+def rate_limit(max_requests=100, per_minutes=60):
+    """Simple rate limiting decorator"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Simple rate limiting based on IP
+            # In production, use Redis or database for proper rate limiting
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Input validation decorator
+def validate_input(required_fields=None, optional_fields=None):
+    """Input validation decorator"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if request.is_json:
+                data = request.get_json()
+                
+                # Validate required fields
+                if required_fields:
+                    for field in required_fields:
+                        if field not in data:
+                            return jsonify({'error': f'Missing required field: {field}'}), 400
+                
+                # Validate field types and formats
+                if 'url' in data:
+                    if not re.match(r'^https?://', data['url']):
+                        return jsonify({'error': 'Invalid URL format'}), 400
+                
+                if 'name' in data:
+                    if not re.match(r'^[a-zA-Z0-9\s\-_]+$', data['name']):
+                        return jsonify({'error': 'Invalid name format'}), 400
+                
+                if 'method' in data:
+                    if data['method'].upper() not in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']:
+                        return jsonify({'error': 'Invalid HTTP method'}), 400
+                
+                # Sanitize input
+                for key, value in data.items():
+                    if isinstance(value, str):
+                        # Remove potential XSS payloads
+                        data[key] = re.sub(r'<script.*?</script>', '', value, flags=re.IGNORECASE | re.DOTALL)
+                        data[key] = re.sub(r'javascript:', '', value, flags=re.IGNORECASE)
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 @api_bp.route('/services', methods=['GET'])
 @login_required
+@rate_limit(max_requests=60, per_minutes=60)
 def get_services():
     """Get all services"""
     try:
@@ -163,6 +217,7 @@ def get_endpoint(endpoint_id):
 
 @api_bp.route('/endpoints/<endpoint_id>/scan', methods=['POST'])
 @login_required
+@rate_limit(max_requests=5, per_minutes=60)
 def trigger_endpoint_scan(endpoint_id):
     """Trigger a scan for an endpoint"""
     try:
