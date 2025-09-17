@@ -11,6 +11,7 @@ import tempfile
 import os
 import uuid
 import re
+import yaml
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, quote
@@ -1193,7 +1194,6 @@ Content-Length: 100
 
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as spec_file:
                 # WuppieFuzz prefers YAML
-                import yaml
                 yaml.dump(api_version.spec_json, spec_file)
                 spec_file_path = spec_file.name
 
