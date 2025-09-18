@@ -616,12 +616,16 @@ temp/
 .env.production
 .env.staging
 secrets.json
-config.json
+*config.json
 
 # Application-specific cache files
-ai_cache.json
-discovery_config.json
-realtime_config.json
 scan_cache/
 vulnerability_cache/
-data/
+
+# Data folder and all its contents
+data/*
+!data/.gitkeep
+
+# Custom templates and all their contents
+templates/custom/*
+!templates/custom/.gitkeep

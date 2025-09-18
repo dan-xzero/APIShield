@@ -334,15 +334,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function loadMonitoringStatus() {
     fetch('/api/realtime-monitoring/status')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('Received monitoring status data:', data);
             if (data.success) {
                 monitoringStatus = data.status;
                 updateStatusDisplay();
                 
                 // Also update baseline status if available
                 if (data.baseline_status) {
+                    console.log('Baseline status data:', data.baseline_status);
                     displayBaselineStatus(data.baseline_status);
+                } else {
+                    console.log('No baseline status data received');
+                    // If no baseline status, show default message
+                    const statusText = document.getElementById('scanningStatusText');
+                    const statusDiv = document.getElementById('scanningStatus');
+                    if (statusText && statusDiv) {
+                        statusText.textContent = 'No baseline established yet';
+                        statusDiv.className = 'alert alert-info';
+                    }
                 }
             } else {
                 showNotification('Failed to load monitoring status: ' + data.message, 'danger');
@@ -350,7 +366,7 @@ function loadMonitoringStatus() {
         })
         .catch(error => {
             console.error('Error loading monitoring status:', error);
-            showNotification('Error loading monitoring status', 'danger');
+            showNotification('Error loading monitoring status: ' + error.message, 'danger');
         });
 }
 
@@ -392,10 +408,9 @@ function loadConfiguration() {
                 const config = data.status;
                 
                 // Update form fields
-                const intervalSeconds = config.check_interval || 300;
-                document.getElementById('checkIntervalInput').value = intervalSeconds;
+                const intervalSeconds = config.check_interval || 1800; // Default to 30 minutes
                 
-                // Set appropriate unit based on interval value
+                // Set appropriate unit based on interval value and show user-friendly values
                 const unitSelect = document.getElementById('intervalUnit');
                 if (intervalSeconds >= 3600) {
                     unitSelect.value = 'hours';
@@ -432,33 +447,34 @@ function loadConfiguration() {
 function updateIntervalValue() {
     const intervalInput = document.getElementById('checkIntervalInput');
     const unitSelect = document.getElementById('intervalUnit');
-    const currentValue = parseInt(intervalInput.value) || 300;
+    const currentValue = parseInt(intervalInput.value) || 30;
     const unit = unitSelect.value;
     
-    // Convert to seconds for storage
-    let seconds;
-    switch(unit) {
-        case 'minutes':
-            seconds = currentValue * 60;
-            break;
-        case 'hours':
-            seconds = currentValue * 3600;
-            break;
-        default: // seconds
-            seconds = currentValue;
-    }
-    
-    // Update the input value to show the converted value
-    intervalInput.value = seconds;
+    // Don't update the input value - let the user see their original input
+    // The conversion to seconds will happen in saveConfiguration()
 }
 
 function saveConfiguration() {
-    // Convert interval to seconds before saving
-    updateIntervalValue();
-    
     const formData = new FormData(configForm);
+    
+    // Convert interval to seconds based on selected unit
+    const intervalValue = parseInt(formData.get('check_interval')) || 30;
+    const unit = document.getElementById('intervalUnit').value;
+    let intervalSeconds;
+    
+    switch(unit) {
+        case 'minutes':
+            intervalSeconds = intervalValue * 60;
+            break;
+        case 'hours':
+            intervalSeconds = intervalValue * 3600;
+            break;
+        default: // seconds
+            intervalSeconds = intervalValue;
+    }
+    
     const config = {
-        check_interval: parseInt(formData.get('check_interval')),
+        check_interval: intervalSeconds,
         change_threshold: parseFloat(formData.get('change_threshold')) / 100,
         scan_depth: formData.get('scan_depth'),
         auto_scan_enabled: formData.get('auto_scan_enabled') === 'on',
@@ -719,7 +735,12 @@ function checkBaselineStatus() {
     showNotification('Checking baseline status...', 'info');
     
     fetch('/api/realtime-monitoring/status')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 const baselineStatus = data.baseline_status || {};
@@ -731,13 +752,92 @@ function checkBaselineStatus() {
         })
         .catch(error => {
             console.error('Error checking baseline status:', error);
-            showNotification('Error checking baseline status', 'danger');
+            showNotification('Error checking baseline status: ' + error.message, 'danger');
         });
 }
 
 function displayBaselineStatus(baselineStatus) {
-    const statusText = document.getElementById('scanningStatusText');
-    const statusDiv = document.getElementById('scanningStatus');
+    console.log('displayBaselineStatus called with:', baselineStatus);
+    
+    // Debug: List all elements with 'scanning' in their ID
+    const allElements = document.querySelectorAll('[id*="scanning"]');
+    console.log('All elements with "scanning" in ID:', allElements);
+    
+    // Try to find elements with retry mechanism
+    let statusText = document.getElementById('scanningStatusText');
+    let statusDiv = document.getElementById('scanningStatus');
+    
+    console.log('Initial element search:', { statusText, statusDiv });
+    
+    // If elements not found, wait a bit and try again
+    if (!statusText || !statusDiv) {
+        console.log('Elements not found, retrying in 200ms...');
+        setTimeout(() => {
+            statusText = document.getElementById('scanningStatusText');
+            statusDiv = document.getElementById('scanningStatus');
+            console.log('Retry - Found elements:', { statusText, statusDiv });
+            
+            if (statusText && statusDiv) {
+                updateBaselineStatusDisplay(baselineStatus, statusText, statusDiv);
+            } else {
+                console.error('Required DOM elements still not found after retry');
+                // Try alternative approach - create elements if they don't exist
+                createBaselineStatusDisplay(baselineStatus);
+            }
+        }, 200);
+        return;
+    }
+    
+    updateBaselineStatusDisplay(baselineStatus, statusText, statusDiv);
+}
+
+function createBaselineStatusDisplay(baselineStatus) {
+    console.log('Creating baseline status display elements...');
+    
+    // Find the baseline management section by looking for the header text
+    const headers = document.querySelectorAll('.card-header h6');
+    let baselineSection = null;
+    
+    for (let header of headers) {
+        if (header.textContent.includes('Baseline Management')) {
+            baselineSection = header.closest('.card');
+            break;
+        }
+    }
+    
+    // Fallback: look for any card with baseline-related content
+    if (!baselineSection) {
+        baselineSection = document.querySelector('.card-body') || document.querySelector('.card');
+    }
+    
+    if (baselineSection) {
+        console.log('Found baseline section:', baselineSection);
+        
+        // Create the status display elements
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'alert alert-info mt-3';
+        statusDiv.id = 'scanningStatus';
+        
+        const statusText = document.createElement('span');
+        statusText.id = 'scanningStatusText';
+        
+        statusDiv.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Status:</strong> ';
+        statusDiv.appendChild(statusText);
+        
+        // Insert at the end of the card body
+        const cardBody = baselineSection.querySelector('.card-body') || baselineSection;
+        cardBody.appendChild(statusDiv);
+        
+        console.log('Created baseline status display elements');
+        
+        // Now update the display
+        updateBaselineStatusDisplay(baselineStatus, statusText, statusDiv);
+    } else {
+        console.error('Could not find baseline management section to create status display');
+    }
+}
+
+function updateBaselineStatusDisplay(baselineStatus, statusText, statusDiv) {
     
     if (baselineStatus.baseline_established) {
         const servicesCount = baselineStatus.services_with_baseline || 0;
@@ -763,20 +863,24 @@ function displayBaselineStatus(baselineStatus) {
         const enableBtn = document.getElementById('enableScanningBtn');
         const disableBtn = document.getElementById('disableScanningBtn');
         
-        if (baselineStatus.auto_scan_enabled) {
-            enableBtn.style.display = 'none';
-            disableBtn.style.display = 'block';
-        } else {
-            enableBtn.style.display = 'block';
-            disableBtn.style.display = 'none';
+        if (enableBtn && disableBtn) {
+            if (baselineStatus.auto_scan_enabled) {
+                enableBtn.style.display = 'none';
+                disableBtn.style.display = 'block';
+            } else {
+                enableBtn.style.display = 'block';
+                disableBtn.style.display = 'none';
+            }
         }
     } else {
         statusText.textContent = 'No baseline established - Click "Establish Baseline" to create one';
         statusDiv.className = 'alert alert-info';
         
         // Hide both buttons when no baseline
-        document.getElementById('enableScanningBtn').style.display = 'none';
-        document.getElementById('disableScanningBtn').style.display = 'none';
+        const enableBtn = document.getElementById('enableScanningBtn');
+        const disableBtn = document.getElementById('disableScanningBtn');
+        if (enableBtn) enableBtn.style.display = 'none';
+        if (disableBtn) disableBtn.style.display = 'none';
     }
 }
 
@@ -1088,6 +1192,18 @@ function refreshScanStatus(scanId) {
     // This would refresh the scan status
     showNotification('Scan status refreshed for scan: ' + scanId, 'info');
 }
+
+// Initialize the page when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Add a small delay to ensure all elements are fully rendered
+    setTimeout(function() {
+        // Load initial monitoring status and configuration
+        loadMonitoringStatus();
+        loadConfiguration();
+        loadRecentChanges();
+        // loadScanActivity(); // Commented out until function is implemented
+    }, 500); // Increased delay to ensure DOM is fully ready
+});
 
 </script>
 {% endblock %}

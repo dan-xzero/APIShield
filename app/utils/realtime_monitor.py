@@ -40,7 +40,7 @@ class RealTimeMonitor:
             self.db_path = db_path
         self.running = False
         self.monitor_thread = None
-        self.check_interval = 30  # Check every 30 seconds
+        self.check_interval = 1800  # Check every 30 minutes
         self.last_check = None
         self.snapshots: Dict[str, APISnapshot] = {}
         self.change_threshold = 0.1  # 10% change threshold
@@ -51,6 +51,7 @@ class RealTimeMonitor:
         # Load configuration
         self.config_file = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'realtime_config.json')
         self._load_config()
+        self._load_snapshots()
         
         logger.info(f"🔍 Real-time API monitoring system initialized with database: {self.db_path}")
         logger.info(f"🔍 Database file exists: {os.path.exists(self.db_path)}")
@@ -61,7 +62,7 @@ class RealTimeMonitor:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
                     config = json.load(f)
-                    self.check_interval = config.get('check_interval', 30)
+                    self.check_interval = config.get('check_interval', 1800)
                     self.auto_scan_enabled = config.get('auto_scan_enabled', True)
                     self.scan_tools = config.get('scan_tools', ['zap', 'nuclei', 'sqlmap', 'ssrfmap'])
                     self.scan_depth = config.get('scan_depth', 'comprehensive')
@@ -89,10 +90,127 @@ class RealTimeMonitor:
         except Exception as e:
             logger.error(f"Error saving real-time config: {e}")
     
+    def _save_snapshots(self):
+        """Save snapshot data to file"""
+        try:
+            os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+            snapshot_file = self.config_file.replace('realtime_config.json', 'snapshots.json')
+            
+            # Convert APISnapshot objects to dictionaries for JSON serialization
+            snapshot_data = {}
+            for service_id, snapshot in self.snapshots.items():
+                if hasattr(snapshot, '__dict__'):
+                    # It's an APISnapshot object
+                    # Convert endpoints to ensure all datetime objects are serialized
+                    serialized_endpoints = []
+                    for endpoint in snapshot.endpoints:
+                        serialized_endpoint = endpoint.copy()
+                        if 'updated_at' in serialized_endpoint and serialized_endpoint['updated_at']:
+                            if hasattr(serialized_endpoint['updated_at'], 'isoformat'):
+                                serialized_endpoint['updated_at'] = serialized_endpoint['updated_at'].isoformat()
+                        serialized_endpoints.append(serialized_endpoint)
+                    
+                    snapshot_data[service_id] = {
+                        'timestamp': snapshot.timestamp.isoformat() if snapshot.timestamp else None,
+                        'service_id': snapshot.service_id,
+                        'endpoint_count': snapshot.endpoint_count,
+                        'endpoints_hash': snapshot.endpoints_hash,
+                        'services_hash': snapshot.services_hash,
+                        'changes_detected': snapshot.changes_detected,
+                        'scan_triggered': snapshot.scan_triggered,
+                        'endpoints': serialized_endpoints,
+                        'change_details': snapshot.change_details
+                    }
+                else:
+                    # It's already a dictionary
+                    snapshot_data[service_id] = snapshot
+            
+            with open(snapshot_file, 'w') as f:
+                json.dump(snapshot_data, f, indent=2)
+            logger.debug(f"Snapshots saved to {snapshot_file}")
+        except Exception as e:
+            logger.error(f"Error saving snapshots: {e}")
+    
+    def _load_snapshots(self):
+        """Load snapshot data from file"""
+        try:
+            snapshot_file = self.config_file.replace('realtime_config.json', 'snapshots.json')
+            if os.path.exists(snapshot_file):
+                with open(snapshot_file, 'r') as f:
+                    snapshot_data = json.load(f)
+                
+                # Convert loaded dictionaries back to APISnapshot objects
+                self.snapshots = {}
+                for service_id, data in snapshot_data.items():
+                    if isinstance(data, dict):
+                        # Convert timestamp string back to datetime
+                        timestamp_str = data.get('timestamp')
+                        if timestamp_str:
+                            from datetime import datetime
+                            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        else:
+                            timestamp = datetime.now(timezone.utc)
+                        
+                        # Convert endpoint updated_at strings back to datetime objects
+                        endpoints = data.get('endpoints', [])
+                        for endpoint in endpoints:
+                            if 'updated_at' in endpoint and endpoint['updated_at']:
+                                if isinstance(endpoint['updated_at'], str):
+                                    try:
+                                        endpoint['updated_at'] = datetime.fromisoformat(endpoint['updated_at'].replace('Z', '+00:00'))
+                                    except (ValueError, AttributeError):
+                                        # If conversion fails, keep as string
+                                        pass
+                        
+                        snapshot = APISnapshot(
+                            timestamp=timestamp,
+                            service_id=data.get('service_id', service_id),
+                            endpoint_count=data.get('endpoint_count', 0),
+                            endpoints_hash=data.get('endpoints_hash', ''),
+                            services_hash=data.get('services_hash', ''),
+                            changes_detected=data.get('changes_detected', False),
+                            scan_triggered=data.get('scan_triggered', False),
+                            endpoints=endpoints,
+                            change_details=data.get('change_details', None)
+                        )
+                        self.snapshots[service_id] = snapshot
+                    else:
+                        # Already an APISnapshot object
+                        self.snapshots[service_id] = data
+                
+                logger.debug(f"Snapshots loaded from {snapshot_file}")
+            else:
+                self.snapshots = {}
+                logger.debug("No existing snapshots found, starting fresh")
+        except Exception as e:
+            logger.error(f"Error loading snapshots: {e}")
+            self.snapshots = {}
+    
     def update_config(self, **kwargs):
         """Update real-time monitoring configuration"""
         for key, value in kwargs.items():
             if hasattr(self, key):
+                # Special handling for check_interval to ensure it's in seconds
+                if key == 'check_interval':
+                    # If value is a string, try to parse it
+                    if isinstance(value, str):
+                        try:
+                            # Handle cases like "30 minutes", "1 hour", etc.
+                            if 'minute' in value.lower():
+                                value = int(value.split()[0]) * 60
+                            elif 'hour' in value.lower():
+                                value = int(value.split()[0]) * 3600
+                            elif 'second' in value.lower():
+                                value = int(value.split()[0])
+                            else:
+                                value = int(value)
+                        except (ValueError, IndexError):
+                            logger.warning(f"Could not parse check_interval value: {value}, using default 30 seconds")
+                            value = 30
+                    # Ensure it's an integer
+                    value = int(value)
+                    logger.info(f"Setting check_interval to {value} seconds")
+                
                 setattr(self, key, value)
         
         self._save_config()
@@ -103,6 +221,14 @@ class RealTimeMonitor:
         if self.running:
             logger.info("🔍 Real-time monitoring is already running")
             return
+        
+        # Only clear snapshots if no baseline exists yet
+        if not self.snapshots:
+            logger.info("🧹 No baseline exists - clearing snapshots for clean baseline...")
+            self.snapshots.clear()
+            self._save_snapshots()
+        else:
+            logger.info(f"📊 Using existing baseline with {len(self.snapshots)} services")
         
         self.running = True
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -130,6 +256,7 @@ class RealTimeMonitor:
             if current_state:
                 # Update snapshots to create baseline
                 self._update_snapshots(current_state)
+                self._save_snapshots()  # Save snapshots to disk
                 logger.info(f"✅ Baseline manually established for {len(current_state)} services")
                 logger.info("🔒 No scanning will occur until changes are detected")
                 return True
@@ -213,6 +340,7 @@ class RealTimeMonitor:
                 if current_state:
                     # Update snapshots to create baseline
                     self._update_snapshots(current_state)
+                    self._save_snapshots()  # Save snapshots to disk
                     logger.info(f"✅ Baseline established for {len(current_state)} services")
                     
                     # Enable auto-scanning after baseline is established
@@ -247,6 +375,7 @@ class RealTimeMonitor:
             
             # Update snapshots
             self._update_snapshots(current_state, changes_detected)
+            self._save_snapshots()  # Save snapshots to disk
             
         except Exception as e:
             logger.error(f"Error checking for API changes: {e}")
@@ -254,91 +383,90 @@ class RealTimeMonitor:
     def _get_current_api_state(self) -> Dict:
         """Get current state of all APIs with individual endpoint tracking"""
         try:
-            # Use existing Flask app context instead of creating new one
-            from flask import current_app
+            # Always use Flask app context for consistency
+            from app import create_app, db
             from app.models import Service, Endpoint
             
-            # Try to use Flask app context, fallback to direct database connection
-            try:
-                # Import database from app
-                from app import db
-                
-                # Get services with detailed endpoint information
-                services = db.session.query(
-                    Service.id,
-                    Service.name,
-                    Service.api_url,
-                    Service.created_at,
-                    db.func.count(Endpoint.id).label('endpoint_count')
-                ).outerjoin(Endpoint).group_by(Service.id).all()
-                
-                # Convert to list of dictionaries
-                services_list = [
-                    {
-                        'id': service.id,
-                        'name': service.name, 
-                        'api_url': service.api_url,
-                        'created_at': service.created_at,
-                        'endpoint_count': service.endpoint_count
-                    }
-                    for service in services
-                ]
-                
-                logger.info(f"Flask app context: Found {len(services_list)} services")
-                
-                # Commit the transaction to ensure data is available
-                db.session.commit()
-                
-                # Use the services_list from Flask app context
-                services = services_list
-                
-            except Exception as e:
-                # Fallback to direct database connection if no app context
-                logger.warning(f"No Flask app context, using direct database connection: {e}")
-                import sqlite3
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                
-                # Get services count
-                cursor.execute("SELECT COUNT(*) FROM services")
-                service_count = cursor.fetchone()[0]
-                
-                # Get endpoints count
-                cursor.execute("SELECT COUNT(*) FROM endpoints")
-                endpoint_count = cursor.fetchone()[0]
-                
-                conn.close()
-                
-                logger.info(f"Direct DB connection: {service_count} services, {endpoint_count} endpoints")
-                
-                if service_count == 0:
-                    return {}
-                
-                # Use direct SQL for service data
-                conn = sqlite3.connect(self.db_path)
-                cursor = conn.cursor()
-                
-                cursor.execute("""
-                    SELECT s.id, s.name, s.api_url, s.created_at, COUNT(e.id) as endpoint_count
-                    FROM services s 
-                    LEFT OUTER JOIN endpoints e ON s.id = e.service_id 
-                    GROUP BY s.id
-                """)
-                services_data = cursor.fetchall()
-                
-                # Convert to list of dictionaries
-                services = [
-                    {
-                        'id': row[0],
-                        'name': row[1], 
-                        'api_url': row[2],
-                        'created_at': row[3],
-                        'endpoint_count': row[4]
-                    }
-                    for row in services_data
-                ]
-                
-                conn.close()
+            app = create_app()
+            with app.app_context():
+                try:
+                    # Get services with detailed endpoint information
+                    services = db.session.query(
+                        Service.id,
+                        Service.name,
+                        Service.api_url,
+                        Service.created_at,
+                        db.func.count(Endpoint.id).label('endpoint_count')
+                    ).outerjoin(Endpoint).group_by(Service.id).all()
+                    
+                    # Convert to list of dictionaries
+                    services_list = [
+                        {
+                            'id': service.id,
+                            'name': service.name, 
+                            'api_url': service.api_url,
+                            'created_at': service.created_at,
+                            'endpoint_count': service.endpoint_count
+                        }
+                        for service in services
+                    ]
+                    
+                    logger.info(f"Found {len(services_list)} services for baseline")
+                    
+                    # Commit the transaction to ensure data is available
+                    db.session.commit()
+                    
+                    # Use the services_list from Flask app context
+                    services = services_list
+                    
+                except Exception as e:
+                    logger.error(f"Error querying services: {e}")
+                    # Fallback to direct database connection if Flask fails
+                    logger.warning("Falling back to direct database connection")
+                    import sqlite3
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    
+                    # Get services count
+                    cursor.execute("SELECT COUNT(*) FROM services")
+                    service_count = cursor.fetchone()[0]
+                    
+                    # Get endpoints count
+                    cursor.execute("SELECT COUNT(*) FROM endpoints")
+                    endpoint_count = cursor.fetchone()[0]
+                    
+                    conn.close()
+                    
+                    logger.info(f"Direct DB connection: {service_count} services, {endpoint_count} endpoints")
+                    
+                    if service_count == 0:
+                        return {}
+                    
+                    # Use direct SQL for service data
+                    conn = sqlite3.connect(self.db_path)
+                    cursor = conn.cursor()
+                    
+                    cursor.execute("""
+                        SELECT s.id, s.name, s.api_url, s.created_at, COUNT(e.id) as endpoint_count
+                        FROM services s 
+                        LEFT OUTER JOIN endpoints e ON s.id = e.service_id 
+                        GROUP BY s.id
+                    """)
+                    services_data = cursor.fetchall()
+                    
+                    # Convert to list of dictionaries
+                    services = [
+                        {
+                            'id': row[0],
+                            'name': row[1], 
+                            'api_url': row[2],
+                            'created_at': row[3],
+                            'endpoint_count': row[4]
+                        }
+                        for row in services_data
+                    ]
+                    
+                    conn.close()
                 
                 # Calculate hashes for change detection
                 state = {}
@@ -355,6 +483,7 @@ class RealTimeMonitor:
                             Endpoint.method,
                             Endpoint.parameters_schema,
                             Endpoint.request_body_schema,
+                            Endpoint.description,
                             Endpoint.updated_at
                         ).filter_by(service_id=service['id']).all()
                         
@@ -434,14 +563,35 @@ class RealTimeMonitor:
             previous_snapshot = self.snapshots.get(service_id)
             
             if not previous_snapshot:
-                # New service discovered
-                changes.append({
-                    'service_id': service_id,
-                    'change_type': 'new_service',
-                    'details': f"New service discovered: {current_service['name']}",
-                    'severity': 'high',
-                    'affected_endpoints': current_service['endpoints']  # All endpoints in new service
-                })
+                # Check if this is truly a new service or just missing snapshot data
+                # Only treat as new service if the service was created very recently (within last hour)
+                service_created_recently = False
+                if 'created_at' in current_service:
+                    try:
+                        from datetime import datetime, timezone, timedelta
+                        created_at = current_service['created_at']
+                        if isinstance(created_at, str):
+                            created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        if isinstance(created_at, datetime):
+                            time_diff = datetime.now(timezone.utc) - created_at
+                            service_created_recently = time_diff < timedelta(hours=1)
+                    except Exception as e:
+                        logger.warning(f"Error checking service creation time: {e}")
+                
+                if service_created_recently:
+                    # Truly new service - scan all endpoints
+                    changes.append({
+                        'service_id': service_id,
+                        'change_type': 'new_service',
+                        'details': f"New service discovered: {current_service['name']}",
+                        'severity': 'high',
+                        'affected_endpoints': current_service['endpoints']
+                    })
+                    logger.info(f"✅ New service detected: {current_service['name']}")
+                else:
+                    # Missing snapshot data - create baseline without scanning
+                    logger.info(f"📊 Missing snapshot for existing service: {current_service['name']} - creating baseline without scanning")
+                    # Don't add to changes - this will create a baseline snapshot without triggering scans
                 continue
             
             # Initialize variables for endpoint changes
@@ -521,7 +671,7 @@ class RealTimeMonitor:
         try:
             # Import here to avoid circular imports
             from app.tasks import scan_endpoint
-            from app.models import Service, Endpoint
+            from app.models import Service, Endpoint, Scan
             from app import create_app, db
             
             app = create_app()
@@ -561,6 +711,17 @@ class RealTimeMonitor:
                             endpoint = Endpoint.query.get(endpoint_info['id'])
                             if not endpoint:
                                 logger.warning(f"Endpoint {endpoint_info['id']} not found in database")
+                                continue
+                            
+                            # Check if this endpoint was recently scanned (within last 30 minutes)
+                            from datetime import datetime, timezone, timedelta
+                            recent_scan = db.session.query(Scan).filter(
+                                Scan.endpoint_id == endpoint.id,
+                                Scan.created_at > datetime.now(timezone.utc) - timedelta(minutes=30)
+                            ).first()
+                            
+                            if recent_scan:
+                                logger.info(f"⏭️ Skipping scan for {endpoint.path} - recently scanned at {recent_scan.created_at}")
                                 continue
                             
                             # Create scan configuration for individual endpoint

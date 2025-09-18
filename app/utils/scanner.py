@@ -264,7 +264,7 @@ class SecurityScanner:
             logger.info(f"📊 Endpoint information gathered: {endpoint_info.get('status_code', 'Unknown')} status, {len(endpoint_info.get('headers', {}))} headers")
             
             # Setup enhanced ZAP configuration
-            context_name = self._setup_enhanced_zap_context(target_url, auth_headers)
+            context_name = self._setup_enhanced_zap_context(target_url, auth_headers, target_endpoint_id)
             
             # Configure ZAP for maximum coverage
             self._configure_zap_max_coverage()
@@ -283,6 +283,13 @@ class SecurityScanner:
             
             # Convert alerts to vulnerabilities with enhanced information
             vulnerabilities = self._convert_zap_alerts_to_vulnerabilities(alerts, endpoint_info, endpoint)
+            
+            # Clean up endpoint-specific context to prevent accumulation
+            try:
+                self._zap_request('context/action/removeContext', {'contextName': context_name})
+                logger.info(f"✅ Cleaned up ZAP context: {context_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to clean up ZAP context {context_name}: {e}")
             
             # Return enhanced results
             return {
@@ -1334,11 +1341,13 @@ requests:
         
         return unique_vulnerabilities
     
-    def _setup_enhanced_zap_context(self, target_url: str, auth_headers: Dict[str, str]) -> str:
+    def _setup_enhanced_zap_context(self, target_url: str, auth_headers: Dict[str, str], endpoint_id: str = None) -> str:
         """Setup enhanced ZAP context with max coverage configuration"""
         try:
-            # Create or get existing context
-            context_name = 'api_security_context'
+            # Create endpoint-specific context to ensure isolated scanning
+            if not endpoint_id:
+                endpoint_id = 'unknown'
+            context_name = f'api_security_context_{endpoint_id}'
             
             # Try to create new context
             try:
@@ -1497,20 +1506,21 @@ requests:
     def _run_enhanced_spider_scan(self, target_url: str, context_name: str):
         """Run enhanced spider scan with max coverage settings"""
         try:
+            # For endpoint-level scans, restrict spider to only the specific endpoint
             spider_params = {
                 'url': target_url,
                 'contextName': context_name,
-                'maxDepth': '5',  # Increased depth
-                'maxChildren': '50',  # Increased children
-                'threadCount': '10',  # Increased threads
+                'maxDepth': '1',  # Reduced depth for endpoint-specific scanning
+                'maxChildren': '10',  # Reduced children for endpoint-specific scanning
+                'threadCount': '5',  # Reduced threads for endpoint-specific scanning
                 'postForm': 'true',  # Enable POST form handling
                 'processForm': 'true',  # Process forms
-                'parseComments': 'true',  # Parse comments
-                'parseRobotsTxt': 'true'  # Parse robots.txt
+                'parseComments': 'false',  # Disable comment parsing for endpoint scans
+                'parseRobotsTxt': 'false'  # Disable robots.txt parsing for endpoint scans
             }
             
             self._zap_request('spider/action/scan', spider_params)
-            logger.info(f"🕷️ Enhanced spider scan started with depth 5, max children 50")
+            logger.info(f"🕷️ Endpoint-specific spider scan started with depth 1, max children 10")
             
             # Wait for spider to complete with timeout
             self._wait_for_spider_completion(timeout=600)  # 10 minutes
