@@ -126,7 +126,8 @@ class APIDefinitionComparator:
                             comparison['change_types'].append('endpoint_added')
                             comparison['has_changes'] = True
             
-            # Find removed endpoints
+            # Find removed endpoints (but be cautious about false positives)
+            removed_count = 0
             for path, path_item in old_paths.items():
                 if path not in new_paths:
                     for method in path_item.keys():
@@ -136,8 +137,18 @@ class APIDefinitionComparator:
                                 'method': method.upper(),
                                 'operation_id': path_item[method].get('operationId')
                             })
-                            comparison['change_types'].append('endpoint_removed')
-                            comparison['has_changes'] = True
+                            removed_count += 1
+            
+            # Only mark as removed if it's a reasonable number (not a complete API replacement)
+            if removed_count > 0:
+                # If more than 50% of endpoints are "removed", it's likely a false positive
+                total_old_endpoints = sum(len([m for m in path_item.keys() if m.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']]) for path_item in old_paths.values())
+                if removed_count <= total_old_endpoints * 0.5:  # Less than 50% removed
+                    comparison['change_types'].append('endpoint_removed')
+                    comparison['has_changes'] = True
+                else:
+                    logger.warning(f"Detected {removed_count} removed endpoints out of {total_old_endpoints} total - likely false positive, ignoring")
+                    comparison['removed_endpoints'] = []  # Clear the false positives
             
             # Find modified endpoints
             for path in old_paths.keys():
@@ -265,29 +276,46 @@ class APIDefinitionComparator:
             # Trigger scans based on change types
             scan_types = self._determine_scan_types(results['comparison_result'])
             
-            # Get all endpoints for this service
-            endpoints = Endpoint.query.filter_by(service_id=service_id).all()
+            # Get only the endpoints that actually changed
+            changed_endpoints = self._get_changed_endpoints(service_id, results['comparison_result'])
             
-            if not endpoints:
-                logger.warning(f"No endpoints found for service {service.name}")
+            if not changed_endpoints:
+                logger.warning(f"No changed endpoints found for service {service.name}")
                 return results
             
+            logger.info(f"Triggering scans for {len(changed_endpoints)} changed endpoints in service {service.name}")
+            
             for scan_type in scan_types:
-                for endpoint in endpoints:
+                for endpoint in changed_endpoints:
                     try:
+                        # Create scan configuration for individual endpoint
+                        scan_config = {
+                            'scan_depth': 'standard',
+                            'timeout': 60,
+                            'tools': ['zap', 'nuclei', 'sqlmap'],
+                            'notifications': True,
+                            'save_parameters': True,
+                            'auto_triggered': True,
+                            'change_reason': 'api_definition_change',
+                            'change_details': f"Endpoint {endpoint.path} ({endpoint.method}) - definition change detected",
+                            'target_endpoint_id': endpoint.id,
+                            'scan_scope': 'endpoint'
+                        }
+                        
                         # Create scan record for each endpoint
                         scan = Scan(
                             endpoint_id=endpoint.id,
                             scan_type=scan_type,
                             status='pending',
-                            scan_time=datetime.now(timezone.utc)
+                            scan_time=datetime.now(timezone.utc),
+                            scan_config=json.dumps(scan_config)
                         )
                         db.session.add(scan)
                         db.session.flush()
                         
                         # Queue the scan task (import here to avoid circular import)
                         from app.tasks import scan_endpoint
-                        task = scan_endpoint.delay(scan.id, {'tools': ['zap', 'nuclei'], 'auto_triggered': True})
+                        task = scan_endpoint.delay(scan.id, scan_config)
                         scan.celery_task_id = task.id
                         
                         results['scans_triggered'] += 1
@@ -321,30 +349,75 @@ class APIDefinitionComparator:
         scan_types = []
         change_types = comparison_result.get('change_types', [])
         
-        # Always run basic scan for any changes
-        scan_types.append('basic')
-        
-        # Run enhanced scan for significant changes
-        significant_changes = [
-            'endpoint_added',
-            'endpoint_removed',
-            'endpoint_modified',
-            'version_change'
-        ]
-        
-        if any(change in change_types for change in significant_changes):
+        # Determine the most appropriate scan type based on the nature of changes
+        if 'endpoint_modified' in change_types:
+            # For modified endpoints, use enhanced scan (most comprehensive for changes)
             scan_types.append('enhanced')
-        
-        # Run comprehensive scan for major changes
-        major_changes = [
-            'version_change',
-            'endpoint_added'
-        ]
-        
-        if any(change in change_types for change in major_changes):
+        elif 'endpoint_added' in change_types:
+            # For new endpoints, use comprehensive scan (full security assessment)
             scan_types.append('comprehensive')
+        elif 'endpoint_removed' in change_types:
+            # For removed endpoints, use basic scan (minimal since endpoint no longer exists)
+            scan_types.append('basic')
+        elif 'version_change' in change_types:
+            # For version changes, use enhanced scan (assess impact of version changes)
+            scan_types.append('enhanced')
+        else:
+            # Default to basic scan for any other changes
+            scan_types.append('basic')
         
         return scan_types
+    
+    def _get_changed_endpoints(self, service_id: int, comparison_result: Dict) -> List[Endpoint]:
+        """
+        Get only the endpoints that actually changed based on comparison results
+        
+        Args:
+            service_id: ID of the service
+            comparison_result: Result from definition comparison
+            
+        Returns:
+            List of Endpoint objects that changed
+        """
+        changed_endpoints = []
+        
+        # Get added endpoints
+        added_endpoints = comparison_result.get('added_endpoints', [])
+        for added_ep in added_endpoints:
+            endpoint = Endpoint.query.filter_by(
+                service_id=service_id,
+                path=added_ep['path'],
+                method=added_ep['method']
+            ).first()
+            if endpoint:
+                changed_endpoints.append(endpoint)
+        
+        # Get modified endpoints
+        modified_endpoints = comparison_result.get('modified_endpoints', [])
+        for modified_ep in modified_endpoints:
+            endpoint = Endpoint.query.filter_by(
+                service_id=service_id,
+                path=modified_ep['path'],
+                method=modified_ep['method']
+            ).first()
+            if endpoint:
+                changed_endpoints.append(endpoint)
+        
+        # For removed endpoints, we don't need to scan them since they no longer exist
+        # But we might want to log them for audit purposes
+        removed_endpoints = comparison_result.get('removed_endpoints', [])
+        if removed_endpoints:
+            logger.info(f"Found {len(removed_endpoints)} removed endpoints for service {service_id} - no scans needed")
+        
+        # Remove duplicates (in case an endpoint appears in multiple change categories)
+        seen_endpoints = set()
+        unique_changed_endpoints = []
+        for endpoint in changed_endpoints:
+            if endpoint.id not in seen_endpoints:
+                seen_endpoints.add(endpoint.id)
+                unique_changed_endpoints.append(endpoint)
+        
+        return unique_changed_endpoints
     
     def update_service_with_comparison(self, service_id: int, new_spec: Dict) -> Dict:
         """
